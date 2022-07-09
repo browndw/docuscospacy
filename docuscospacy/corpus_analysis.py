@@ -2,6 +2,7 @@ from tmtoolkit.corpus import doc_tokens, kwic
 from tmtoolkit.tokenseq import pmi, pmi2, pmi3, token_match, index_windows_around_matches
 import numpy as np
 import pandas as pd
+import re
 from scipy.stats.distributions import chi2
 from collections import Counter
 
