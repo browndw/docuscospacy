@@ -184,6 +184,47 @@ def _get_ngrams(iterable, n=2):
     """
     return zip(*[islice(iterable, i, None) for i in range(n)])
 
+def _log_like(n_target, n_reference, total_target, total_reference, correct=False):
+    """
+    Calculate log-likelihood (or G2) hypothesis test.
+    
+    :param n_target: token frequency in the target corpus
+    :param n_reference: token frequency in the reference corpus
+    :param total_target: total tokens in the target corpus
+    :param total_reference: total tokens in the reference corpus
+    :param correct: if True, apply the Yates correction
+    """
+    expected_a = (n_target + n_reference)*(total_target/(total_target + total_reference))
+    expected_b = (n_target + n_reference)*(total_reference/(total_target + total_reference))
+    if bool(correct) == True:
+        n_a = (n_target - 0.5) if n_target - expected_a > 0.25 else n_target
+        n_b = (n_reference + 0.5) if n_target - expected_a > 0.25 else n_reference
+        n_a = (n_target + 0.5) if expected_a - n_target > 0.25 else n_a
+        n_b = (n_reference - 0.5) if expected_a - n_target > 0.25 else n_b
+    else:
+        n_a = n_target
+        n_b = n_reference
+    L1 = 0 if n_a == 0 else n_a*np.log(n_a/expected_a)
+    L2 = 0 if n_b == 0 else n_b*np.log(n_b/expected_b)
+    likelihood = 2*(L1 + L2)
+    return(likelihood)
+
+
+def _log_ratio(n_target, n_reference, total_target, total_reference):
+    """
+    Calculate Log Ratio effect size.
+    
+    :param n_target: token frequency in the target corpus
+    :param n_reference: token frequency in the reference corpus
+    :param total_target: total tokens in the target corpus
+    :param total_reference: total tokens in the reference corpus
+    """
+    percent_a = 0.5 / total_target if n_target == 0 else n_target/total_target
+    percent_b = 0.5 / total_reference if n_reference == 0 else n_reference/total_reference
+    ratio = np.log2(percent_a / percent_b)
+    return(ratio)
+
+
 def _conlltags2tree(
     sentence, chunk_types=("NP", "PP", "VP"), root_label="S", strict=False
 ):
