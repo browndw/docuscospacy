@@ -1,5 +1,6 @@
 """
-Misc. utility functions.
+Misc. utility functions for corpus processing.
+
 .. codeauthor:: David Brown <dwb2@andrew.cmu.edu>
 """
 
@@ -12,6 +13,7 @@ from collections import Counter
 def _convert_totuple(tok):
     """
     Convert a tmtoolkit tokens object to a tuple of the nltk-type: [(token), (tag), (iob-ent)].
+    
     :param tok: a tmtoolkit tokens object
     """
     token_tuple = []
@@ -36,6 +38,7 @@ def _convert_totuple(tok):
 def _groupby_consecutive(lst):
     """
     Convenience function for grouping consecutive items in a list.
+    
     :param lst: a list
     """
     for _, g in groupby(enumerate(lst), lambda x: x[0] - x[1]):
@@ -45,6 +48,7 @@ def _groupby_consecutive(lst):
 def _merge_tags(tok):
      """
     Merge part-of-speech tag sequences into a single token like 'for example' or 'in spite of'.
+    
     :param tok: a tokens tuple object
     """
     p = re.compile('[a-z]+')
@@ -81,6 +85,7 @@ def _merge_tags(tok):
 def _merge_ds(tok):
     """
     Merge DocuScope NER sequences into a single token.
+    
     :param tok: a tokens tuple object
     """
     p = re.compile('[^a-z]+')
@@ -104,6 +109,7 @@ def _merge_ds(tok):
 def _count_tags(tok, n_tokens):
     """
     Count part-of-speech tags.
+    
     :param tok: a tokens tuple object
     """
     tag_list = []
@@ -136,6 +142,7 @@ def _count_tags(tok, n_tokens):
 def _get_ngrams(iterable, n=2):
     """
     Helper function for splitting list into ngrams.
+    
     :param iterable: a list to iterate over
     :param n: the size of the ngram to be generated
     """
@@ -176,7 +183,7 @@ def _conlltags2tree(
             raise ValueError(f"Bad conll tag {chunktag!r}")
     return tree
   
-  class Tree(list):
+class Tree(list):
     r"""
     A Tree represents a hierarchical grouping of leaves and subtrees.
     For example, each constituent in a syntax tree is represented by a single Tree.
