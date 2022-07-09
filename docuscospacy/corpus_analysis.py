@@ -1,9 +1,9 @@
-from tmtoolkit.corpus import Corpus, vocabulary_size, doc_tokens, corpus_num_tokens, kwic
+from tmtoolkit.corpus import Corpus, doc_tokens, kwic
 from tmtoolkit.tokenseq import pmi, pmi2, pmi3, token_match, index_windows_around_matches
 import numpy as np
 import pandas as pd
 
-from .corpus_utils import _convert_totuple, _merge_tags, _merge_ds, _get_ngrams
+from .corpus_utils import _convert_totuple, _merge_tags, _merge_ds, _count_tags, _count_ds,  _get_ngrams
 
 def convert_corpus(tm_corpus):
     """
