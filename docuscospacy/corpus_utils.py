@@ -6,7 +6,8 @@ Misc. utility functions.
 import string
 import re
 import numpy as np
-from itertools import groupby
+from itertools import groupby, islice
+from collections import Counter
 
 def _convert_totuple(tok):
     """
@@ -130,6 +131,14 @@ def _count_tags(tok, n_tokens):
     tag_counts = zip(tags.tolist(), tag_freq.tolist(), tag_prop.tolist(), tag_range.tolist())
     tag_counts = list(tag_counts)
     return(tag_counts)
+
+def _get_ngrams(iterable, n=2):
+    """
+    Helper function for splitting list into ngrams.
+    :param iterable: a list to iterate over
+    :param n: the size of the ngram to be generated
+    """
+    return zip(*[islice(iterable, i, None) for i in range(n)])
 
 def _conlltags2tree(
     sentence, chunk_types=("NP", "PP", "VP"), root_label="S", strict=False
