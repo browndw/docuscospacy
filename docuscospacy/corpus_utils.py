@@ -31,8 +31,9 @@ def _convert_totuple(tok):
         tag_list = ['MC' if bool(is_digit.match(token_list[i])) and tag_list[i] != 'Y' else v for i, v in enumerate(tag_list)]
         token_tuple.append(list(zip(token_list, tag_list, iob_ent)))
     return(token_tuple)
-  
-  def _groupby_consecutive(lst):
+
+
+def _groupby_consecutive(lst):
     """
     Convenience function for grouping consecutive items in a list.
     :param lst: a list
