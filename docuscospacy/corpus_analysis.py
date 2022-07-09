@@ -200,3 +200,24 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
     if statistic=='pmi3':
         df['MI'] = np.vectorize(pmi3)(node_freq, df['total_freq'], df['span_freq'], sum(df_total['total_freq']))
     return(df)
+
+def kwic_center_node(tm_corpus, node_word):
+    """
+    Generate KWIC table with the node word in the center column.
+    
+    :param tm_corpus: A tmtoolkit corpus
+    :param node_word: The token of interest
+    :return: a dataframe
+    """
+    kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=True)
+    keys = [k for k in kl.keys() for v in kl[k]]
+    token_list = [v for k in kl.keys() for v in kl[k]]
+    pre_node = [' '.join(l[:10]) for l in token_list]
+    # set a span after which characters are trimmed for display
+    pre_node = [('..' + l[len(l)-75:]) if len(l) > 75 else l for l in pre_node]
+    node = [l[10] for l in token_list]
+    post_node = [' '.join(l[11:]) for l in token_list]
+    # apply same trim span
+    post_node = [(l[:75] + '..') if len(l) > 75 else l for l in post_node]
+    df = pd.DataFrame.from_dict({'Doc': keys, 'Pre-Node': pre_node, 'Node': node, 'Post-Node': post_node})
+    return(df)
