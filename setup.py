@@ -15,8 +15,11 @@ LONG_DESCRIPTION = (HERE / "README.md").read_text()
 LONG_DESC_TYPE = "text/markdown"
 
 INSTALL_REQUIRES = [
-      'numpy',
-      'pandas'
+      'numpy>=1.22.0',
+      'pandas>=1.4.0',
+      'tmtoolkit>=0.11.0',
+      're',
+      'string'
 ]
 
 setup(name=PACKAGE_NAME,
