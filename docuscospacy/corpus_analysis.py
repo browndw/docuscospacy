@@ -206,15 +206,20 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
         df['MI'] = np.vectorize(pmi3)(node_freq, df['total_freq'], df['span_freq'], sum(df_total['total_freq']))
     return(df)
 
-def kwic_center_node(tm_corpus, node_word):
+def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
     """
     Generate KWIC table with the node word in the center column.
     
     :param tm_corpus: A tmtoolkit corpus
     :param node_word: The token of interest
+    :param ignore_case: If set to False, search will be case sensitive
+    :param glob: If set to True, glob-style searching is enabled
     :return: a dataframe
     """
-    kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=True)
+    if bool(glob)==False:
+        kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=ignore_case)
+    else:
+        kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=ignore_case, match_type='glob')
     keys = [k for k in kl.keys() for v in kl[k]]
     token_list = [v for k in kl.keys() for v in kl[k]]
     pre_node = [' '.join(l[:10]) for l in token_list]
