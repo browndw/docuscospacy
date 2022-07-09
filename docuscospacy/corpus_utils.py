@@ -5,6 +5,8 @@ Misc. utility functions.
 
 import string
 import re
+import numpy as np
+from itertools import groupby
 
 def _convert_totuple(tok):
     """
@@ -30,12 +32,139 @@ def _convert_totuple(tok):
     return(token_tuple)
   
   def _groupby_consecutive(lst):
-        """
+    """
     Convenience function for grouping consecutive items in a list.
     :param lst: a list
     """
     for _, g in groupby(enumerate(lst), lambda x: x[0] - x[1]):
         yield list(map(itemgetter(1), g))
+
+
+def _merge_tags(tok):
+     """
+    Merge part-of-speech tag sequences into a single token like 'for example' or 'in spite of'.
+    :param tok: a tokens tuple object
+    """
+    p = re.compile('[a-z]+')
+    phrase_list = []
+    for i in range(0,len(tok)):
+        # filter out strings that don't contain at least one alphabetic character
+        tpf = [x for x in tok[i] if p.search(x[0])]
+        token_list = [x[0] for x in tpf]
+        tag_list = [x[1] for x in tpf]
+        tag_seq = [re.findall(r'\d\d$', x) for x in tag_list]
+        tag_seq = [x for sublist in tag_seq for x in (sublist or ['99'])]
+        tag_seq = [int(x) for x in tag_seq]
+        tag_seq = list(_groupby_consecutive(lst=tag_seq))
+        for x in tag_seq:
+            x[0] = re.sub('\\d+', 'B-', str(x[0]))
+        tag_seq = [x for xs in tag_seq for x in xs]
+        tag_seq = ['I-' if isinstance(x, int) else x for x in tag_seq]
+        tag_seq = ["{}{:02}".format(a_, b_) for a_, b_ in zip(tag_seq, tag_list)]
+        tag_seq = [re.sub(r'\d\d$', '', x) for x in tag_seq]
+        token_tp = list(zip(token_list, tag_list, tag_seq))
+        ne_tree = _conlltags2tree(token_tp)
+        agg_tokens = []
+        for subtree in ne_tree:
+            if type(subtree) == Tree:
+                original_label = subtree.label()
+                original_string = " ".join([token for token, pos in subtree.leaves()])
+            else:
+                original_label = 'O'
+                original_string = subtree[0]
+            agg_tokens.append((original_string, original_label))
+        phrase_list.append(agg_tokens)
+    return(phrase_list)
+
+def _merge_ds(tok):
+    """
+    Merge DocuScope NER sequences into a single token.
+    :param tok: a tokens tuple object
+    """
+    p = re.compile('[^a-z]+')
+    phrase_list = []
+    for i in range(0,len(tok)):
+        # filter out strings that don't contain at least one alphabetic character
+        tpf = [x for x in tok[i] if not (x[2] == 'O-' and p.search(x[0]))]
+        ne_tree = _conlltags2tree(tpf)
+        agg_tokens = []
+        for subtree in ne_tree:
+            if type(subtree) == Tree:
+                original_label = subtree.label()
+                original_string = " ".join([token for token, pos in subtree.leaves()])
+            else:
+                original_label = 'O'
+                original_string = subtree[0]
+            agg_tokens.append((original_string, original_label))
+        phrase_list.append(agg_tokens)
+    return(phrase_list)
+
+def _count_tags(tok, n_tokens):
+    """
+    Count part-of-speech tags.
+    :param tok: a tokens tuple object
+    """
+    tag_list = []
+    # remove tags for puct, unidentified, and multitoken units
+    remove_starttags = ('Y', 'FU')
+    remove_endtags = ('22', '32', '33', '42', '43', '44')
+    for i in range(0,len(tok)):
+        tags = [x[1] for x in tok[i]]
+        tags = [x for x in tags if not x.startswith(remove_starttags)]
+        tags = [x for x in tags if not x.endswith(remove_endtags)]
+        tags = [re.sub(r'\d\d', '', x) for x in tags]
+        tag_list.append(tags)
+    tag_range = []
+    for i in range(0,len(tok)):
+        tag_range.append(list(set(tag_list[i])))
+    tag_range = [x for xs in tag_range for x in xs]
+    tag_range = Counter(tag_range)
+    tag_range = sorted(tag_range.items(), key=lambda pair: pair[0], reverse=False)
+    tag_list = [x for xs in tag_list for x in xs]
+    tag_list = Counter(tag_list)
+    tag_list = sorted(tag_list.items(), key=lambda pair: pair[0], reverse=False)
+    tags = np.array([x[0] for x in tag_list])
+    tag_freq = np.array([x[1] for x in tag_list])
+    tag_prop = np.array(tag_freq)/n_tokens*100
+    tag_range = np.array([x[1] for x in tag_range])/len(tok)*100
+    tag_counts = zip(tags.tolist(), tag_freq.tolist(), tag_prop.tolist(), tag_range.tolist())
+    tag_counts = list(tag_counts)
+    return(tag_counts)
+
+def _conlltags2tree(
+    sentence, chunk_types=("NP", "PP", "VP"), root_label="S", strict=False
+):
+    """
+    Convert the CoNLL IOB format to a tree.
+    """
+    tree = Tree(root_label, [])
+    for (word, postag, chunktag) in sentence:
+        if chunktag is None:
+            if strict:
+                raise ValueError("Bad conll tag sequence")
+            else:
+                # Treat as O
+                tree.append((word, postag))
+        elif chunktag.startswith("B-"):
+            tree.append(Tree(chunktag[2:], [(word, postag)]))
+        elif chunktag.startswith("I-"):
+            if (
+                len(tree) == 0
+                or not isinstance(tree[-1], Tree)
+                or tree[-1].label() != chunktag[2:]
+            ):
+                if strict:
+                    raise ValueError("Bad conll tag sequence")
+                else:
+                    # Treat as B-*
+                    tree.append(Tree(chunktag[2:], [(word, postag)]))
+            else:
+                tree[-1].append((word, postag))
+        elif chunktag == "O-":
+            tree.append((word, postag))
+        else:
+            raise ValueError(f"Bad conll tag {chunktag!r}")
+    return tree
   
   class Tree(list):
     r"""
