@@ -155,7 +155,7 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
     if count_by == 'ds':
         tc = _merge_ds(tok)
     in_span = []
-    for i in range(0,20):
+    for i in range(0,len(tc):
         tpf = tc[i]
         # create a boolean vector for node word
         if node_tag is None:
@@ -164,9 +164,9 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
             v = [t[0] == node_word and t[1].startswith(node_tag) for t in tpf]
         if sum(v) > 0:
             # get indices within window around the node
-            idx = list(index_windows_around_matches(np.array(v), left=4, right=4, flatten=False))
+            idx = list(index_windows_around_matches(np.array(v), left=l_span, right=r_span, flatten=False))
             # remove node word from collocates
-            idx = np.delete(idx, 4, axis=1)
+            idx = np.delete(idx, l_span, axis=1)
             idx = [x for xs in idx for x in xs]
             coll = [tpf[i] for i in idx]
         else:
