@@ -228,23 +228,23 @@ def kwic_center_node(tm_corpus, node_word):
 
 def keyness_table(target_counts, ref_counts, total_target, total_reference, correct=False, tags_only=False):
     if bool(tags_only) == True:
-        df_target = target_counts.columns=['tag','target_af', 'target_rf', 'target_range']
+        df_target = target_counts.columns=['Tag','AF', 'RF', 'Range']
     else:
-        df_target = target_counts.columns=['token', 'tag','target_af', 'target_rf', 'target_range']
+        df_target = target_counts.columns=['Token', 'Tag','AF', 'RF', 'Range']
     if bool(tags_only) == True:
-        df_ref = ref_counts.columns=['tag', 'ref_af', 'ref_rf', 'ref_range'])
+        df_ref = ref_counts.columns=['Tag', 'AF Ref', 'RF Ref', 'Range Ref'])
     else:
-        df_ref = ref_counts.columns=['token', 'tag', 'ref_af', 'ref_rf', 'ref_range']
+        df_ref = ref_counts.columns=['Token', 'Tag', 'Af Ref', 'RF Ref', 'Range Ref']
     if bool(tags_only) == True:
-        df = pd.merge(df_target, df_ref, how='outer', on=['tag'])
+        df = pd.merge(df_target, df_ref, how='outer', on=['Tag'])
     else:
-        df = pd.merge(df_target, df_ref, how='outer', on=['token', 'tag'])
+        df = pd.merge(df_target, df_ref, how='outer', on=['Token', 'Tag'])
     df.fillna(0, inplace=True)
     if bool(correct) == True:
-        df['LL'] = np.vectorize(_log_like)(df['target_af'], df['ref_af'], total_target, total_reference, correct=True)
+        df['LL'] = np.vectorize(_log_like)(df['AF'], df['AF Ref'], total_target, total_reference, correct=True)
     else:
-        df['LL'] = np.vectorize(_log_like)(df['target_af'], df['ref_af'], total_target, total_reference, correct=False)
-    df['LR'] = np.vectorize(_log_ratio)(df['target_af'], df['ref_af'], total_target, total_reference)
+        df['LL'] = np.vectorize(_log_like)(df['AF'], df['AF Ref'], total_target, total_reference, correct=False)
+    df['LR'] = np.vectorize(_log_ratio)(df['AF'], df['AF Ref'], total_target, total_reference)
     df['PV'] = chi2.sf(df['LL'], 1)
     df.PV = df.PV.round(5)
     return(df)
