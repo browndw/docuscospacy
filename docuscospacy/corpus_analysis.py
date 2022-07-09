@@ -224,3 +224,28 @@ def kwic_center_node(tm_corpus, node_word):
     post_node = [(l[:75] + '..') if len(l) > 75 else l for l in post_node]
     df = pd.DataFrame.from_dict({'Doc': keys, 'Pre-Node': pre_node, 'Node': node, 'Post-Node': post_node})
     return(df)
+
+
+def keyness_table(target_counts, ref_counts, total_target, total_reference, correct=False, tags_only=False):
+    if bool(tags_only) == True:
+        df_target = target_counts.columns=['tag','target_af', 'target_rf', 'target_range']
+    else:
+        df_target = target_counts.columns=['token', 'tag','target_af', 'target_rf', 'target_range']
+    if bool(tags_only) == True:
+        df_ref = ref_counts.columns=['tag', 'ref_af', 'ref_rf', 'ref_range'])
+    else:
+        df_ref = ref_counts.columns=['token', 'tag', 'ref_af', 'ref_rf', 'ref_range']
+    if bool(tags_only) == True:
+        df = pd.merge(df_target, df_ref, how='outer', on=['tag'])
+    else:
+        df = pd.merge(df_target, df_ref, how='outer', on=['token', 'tag'])
+    df.fillna(0, inplace=True)
+    if bool(correct) == True:
+        df['LL'] = np.vectorize(_log_like)(df['target_af'], df['ref_af'], total_target, total_reference, correct=True)
+    else:
+        df['LL'] = np.vectorize(_log_like)(df['target_af'], df['ref_af'], total_target, total_reference, correct=False)
+    df['LR'] = np.vectorize(_log_ratio)(df['target_af'], df['ref_af'], total_target, total_reference)
+    df['PV'] = chi2.sf(df['LL'], 1)
+    df.PV = df.PV.round(5)
+    return(df)
+
