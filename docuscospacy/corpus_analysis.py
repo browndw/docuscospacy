@@ -1,7 +1,9 @@
-from tmtoolkit.corpus import Corpus, doc_tokens, kwic
+from tmtoolkit.corpus import doc_tokens, kwic
 from tmtoolkit.tokenseq import pmi, pmi2, pmi3, token_match, index_windows_around_matches
 import numpy as np
 import pandas as pd
+from scipy.stats.distributions import chi2
+from collections import Counter
 
 from .corpus_utils import _convert_totuple, _merge_tags, _merge_ds, _count_tags, _count_ds,  _get_ngrams
 
