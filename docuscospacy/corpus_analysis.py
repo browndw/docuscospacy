@@ -208,7 +208,7 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
 
 def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
     """
-    Generate KWIC table with the node word in the center column.
+    Generate a KWIC table with the node word in the center column.
     
     :param tm_corpus: A tmtoolkit corpus
     :param node_word: The token of interest
@@ -234,18 +234,29 @@ def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
 
 
 def keyness_table(target_counts, ref_counts, total_target, total_reference, correct=False, tags_only=False):
+     """
+    Generate a keyness table comparing token frequencies from a taget and a reference corpus
+    
+    :param target_counts: A frequency table from a target corpus
+    :param ref_counts: A frequency table from a reference corpus
+    :param total_target: Total number of tokens in the target corpus
+    :param total_target: Total number of tokens in the reference corpus
+    :param correct: If True, apply the Yates correction to the log-likelihood calculation
+    :param tags_only: If True, it is assumed the frequency tables are of the type produce by the tags_table function
+    :return: a dataframe
+    """
     if bool(tags_only) == True:
-        df_target = target_counts.columns=['Tag','AF', 'RF', 'Range']
+        target_counts.columns=['Tag','AF', 'RF', 'Range']
     else:
-        df_target = target_counts.columns=['Token', 'Tag','AF', 'RF', 'Range']
+        target_counts.columns=['Token', 'Tag','AF', 'RF', 'Range']
     if bool(tags_only) == True:
-        df_ref = ref_counts.columns=['Tag', 'AF Ref', 'RF Ref', 'Range Ref'])
+        ref_counts.columns=['Tag', 'AF Ref', 'RF Ref', 'Range Ref']
     else:
-        df_ref = ref_counts.columns=['Token', 'Tag', 'Af Ref', 'RF Ref', 'Range Ref']
+        ref_counts.columns=['Token', 'Tag', 'AF Ref', 'RF Ref', 'Range Ref']
     if bool(tags_only) == True:
-        df = pd.merge(df_target, df_ref, how='outer', on=['Tag'])
+        df = pd.merge(target_counts, ref_counts, how='outer', on=['Tag'])
     else:
-        df = pd.merge(df_target, df_ref, how='outer', on=['Token', 'Tag'])
+        df = pd.merge(target_counts, ref_counts, how='outer', on=['Token', 'Tag'])
     df.fillna(0, inplace=True)
     if bool(correct) == True:
         df['LL'] = np.vectorize(_log_like)(df['AF'], df['AF Ref'], total_target, total_reference, correct=True)
@@ -255,4 +266,3 @@ def keyness_table(target_counts, ref_counts, total_target, total_reference, corr
     df['PV'] = chi2.sf(df['LL'], 1)
     df.PV = df.PV.round(5)
     return(df)
-
