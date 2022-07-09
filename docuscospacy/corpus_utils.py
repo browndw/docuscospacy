@@ -111,6 +111,7 @@ def _count_tags(tok, n_tokens):
     Count part-of-speech tags.
     
     :param tok: a tokens tuple object
+    :param n_tokens: total number of tokens against which to normalize
     """
     tag_list = []
     # remove tags for puct, unidentified, and multitoken units
@@ -138,6 +139,41 @@ def _count_tags(tok, n_tokens):
     tag_counts = zip(tags.tolist(), tag_freq.tolist(), tag_prop.tolist(), tag_range.tolist())
     tag_counts = list(tag_counts)
     return(tag_counts)
+
+
+def _count_ds(tok, n_tokens):
+    """
+    Count part-of-speech tags.
+    
+    :param tok: a tokens tuple object
+    :param n_tokens: total number of tokens against which to normalize
+    """
+    ds_list = []
+    for i in range(0,len(tok)):
+        ds_cats = [x[2] for x in tok[i]]
+        # filter for benning entity tags
+        ds_cats = [x for x in ds_cats if x.startswith('B-')]
+        ds_list.append(ds_cats)
+    ds_range = []
+    for i in range(0,len(tok)):
+        ds_range.append(list(set(ds_list[i])))
+    ds_range = [x for xs in ds_range for x in xs]
+    ds_range = Counter(ds_range)
+    ds_range = sorted(ds_range.items(), key=lambda pair: pair[0], reverse=False)
+    ds_list = [x for xs in ds_list for x in xs]
+    ds_list = Counter(ds_list)
+    ds_list = sorted(ds_list.items(), key=lambda pair: pair[0], reverse=False)
+    ds_cats = [x[0] for x in ds_list]
+    ds_cats = [x.replace('B-', '') for x in ds_cats]
+    ds_cats = [re.sub(r'([a-z])([A-Z])', '\\1 \\2', x) for x in ds_cats]
+    ds_cats = np.array(ds_cats)
+    ds_freq = np.array([x[1] for x in ds_list])
+    ds_prop = np.array(ds_freq)/n_tokens*100
+    ds_range = np.array([x[1] for x in ds_range])/len(tok)*100
+    ds_counts = zip(ds_cats.tolist(), ds_freq.tolist(), ds_prop.tolist(), ds_range.tolist())
+    ds_counts = list(ds_counts)
+    return(ds_counts)
+
 
 def _get_ngrams(iterable, n=2):
     """
