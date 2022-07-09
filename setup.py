@@ -6,7 +6,7 @@ HERE = pathlib.Path(__file__).parent
 VERSION = '0.1.0'
 PACKAGE_NAME = 'docuscospacy'
 AUTHOR = 'David Brown'
-AUTHOR_EMAIL = 'dwb2@andrew.cmu.edu
+AUTHOR_EMAIL = 'dwb2@andrew.cmu.edu'
 URL = 'https://github.com/browndw/docuscospacy'
 
 LICENSE = 'Apache License 2.0'
