@@ -9,6 +9,7 @@ import re
 import numpy as np
 from itertools import groupby, islice
 from collections import Counter
+from operator import itemgetter
 
 def _convert_totuple(tok):
     """
