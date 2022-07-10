@@ -7,21 +7,32 @@ The **docuscospacy** package contains a set of functions to facilitate the proce
 
 ### What is DocuScope?
 
-DocuScope is a dictionary-based tagger, developed by David Kaufer and Suguru Ishizaki at Carnegie Mellon University. You can find an early version of the dictionary [here](https://github.com/docuscope/DocuScope-Dictionary-June-26-2012).
+DocuScope is a dictionary-based tagger, developed by [David Kaufer and Suguru Ishizaki](https://www.igi-global.com/chapter/computer-aided-rhetorical-analysis/61054) at Carnegie Mellon University. You can find an early version of the dictionary [here](https://github.com/docuscope/DocuScope-Dictionary-June-26-2012).
 
 The tagger organizes words and phrases into 38 rhetorically oriented categories. (You can find descriptions of the categories below.) The spaCy model was trained on data tagged with the 2020 version of the dictionary.
 
 ### Why use the spaCy model?
 
-DocuScope has been used in a wide variety of studies. It has proven particularly effective in modelling variation (in genre, register, and style) in a variety of historical, literary, educational, and political texts (Hope and Witmore 2004, Marcellino 2014, Parry-Giles and Kaufer 2017, Taguchi et al. 2017, Tootalian 2017, Zhao and Kaufer 2013, Kaufer et al. 2005).
+DocuScope has been used in a wide variety of studies. It has proven particularly effective in modelling variation (in genre, register, and style) in a variety of historical, literary, educational, and political texts (Brown and Laudenbach 2021, Hope and Witmore 2004, Marcellino 2014, Parry-Giles and Kaufer 2017, Taguchi et al. 2017, Tootalian 2017, Zhao and Kaufer 2013).
 
 The spaCy model makes some of that explanatory power more readily available to researchers, students, and NLP professionals.
 
 Additionally, the model was trained on the CLAWS7 part-of-speech tagset. This is useful for anyone who wants to compare results to any of [the BYU family of corpora](https://www.english-corpora.org/), which uses the same system.
 
+Note that there is also [a more accurate model trained on BERT](https://huggingface.co/browndw/docusco-bert). However, that model requires more expertise to implement, particularly on longer texts.
+
+
 ### Model output
 
+Many DocuScope tokens are made up of multiple words. Thus, the model was trianed using a NER pipeline and a typical IOB scheme.
+
+DocuScope tags can, therefore, be accessing using any of the **ent** attributes and the CLAWS7 tags using the **tag** attributes.
+
+For example, tokenizing the sentence:
+
 > Jaws is a shrewd cinematic equation which not only gives you one or two very nasty turns when you least expect them but, possibly more important, knows when to make you think another is coming without actually providing it.
+
+would produce:
 
 | |text|tag\_|ent\_|ent\_type_ |
 |---|---|---|---|--- |
@@ -72,7 +83,9 @@ Additionally, the model was trained on the CLAWS7 part-of-speech tagset. This is
 
 To intall:
 
-`pip intall docuscospacy`
+```python
+pip intall docuscospacy
+```
 
 ## Processing a corpus
 
@@ -82,6 +95,43 @@ Preparing text data for analysis requires:
 2. Loading a spaCy instance from the model,
 3. Preparing, loading, and tokenizing a corpus using tmtoolkit's functionalities, and
 4. Converting the corpus into a list of nltk-like tuples.
+
+### Loading an instance
+
+Load the model like any spaCy model:
+
+```python
+import spacy
+```
+
+```python
+nlp = spacy.load('en_docusco_spacy')
+```
+
+
+### Preparing, loading, and tokenizing a corpus
+
+To ensure accurate tagging, pre-processing should be minimal, as DocuScope is sensitive to case and to surrounding punctuation.
+
+However, third-person possessive *its* should be split pior to taagging. It is also useful to remove carriage returns, tabs, etc.
+
+This can be accomplished with a simple function passed to a tmtoolkit corpus function:
+
+```python
+from tmtoolkit.corpus import Corpus
+```
+
+```python
+def pre_process(txt):
+    txt = re.sub(r'\bits\b', 'it s', txt)
+    txt = re.sub(r'\bIts\b', 'It s', txt)
+    txt = " ".join(txt.split())
+    return(txt)
+```
+
+```python
+corp = Corpus.from_folder('my_corpus', spacy_instance=nlp, raw_preproc=[pre_process], spacy_token_attrs=['tag', 'ent_iob', 'ent_type', 'is_punct'])
+```
 
 
 | Category (Cluster)|Description|Examples |
@@ -137,6 +187,15 @@ Preparing text data for analysis requires:
 }
 ```
 ```
+@article{brown2021stylistic,
+  title={Stylistic variation in email},
+  author={Brown, David West and Laudenbach, Michael},
+  journal={Register Studies},
+  year={2021},
+  publisher={John Benjamins Publishing Company Amsterdam/Philadelphia}
+}
+```
+```
 @article{hope2004very,
   title={The very large textual object: a prosthetic reading of Shakespeare},
   author={Hope, Jonathan and Witmore, Michael},
@@ -158,5 +217,49 @@ Preparing text data for analysis requires:
   pages={385--405},
   year={2014},
   publisher={Sage Publications Sage UK: London, England}
+}
+```
+```
+@article{kaufer2017hillary,
+  title={Hillary Clinton’s presidential campaign memoirs: A study in contrasting identities},
+  author={Kaufer, David S and Parry-Giles, Shawn J},
+  journal={Quarterly Journal of Speech},
+  volume={103},
+  number={1-2},
+  pages={7--32},
+  year={2017},
+  publisher={Taylor \& Francis}
+}
+```
+```
+@article{taguchi2017corpus,
+  title={A corpus linguistics analysis of on-line peer commentary},
+  author={Taguchi, Naoko and Kaufer, David and G{\'o}mez-Laich, Pia Maria and Zhao, Helen},
+  journal={Pragmatics and language learning},
+  volume={14},
+  pages={357--170},
+  year={2017}
+}
+```
+```
+@article{tootalian2017corrupt,
+  title={“To Corrupt a Man in the Midst of a Verse”: Ben Jonson and the Prose of the World},
+  author={Tootalian, Jacob},
+  journal={Ben Jonson Journal},
+  volume={24},
+  number={1},
+  pages={46--72},
+  year={2017},
+  publisher={Edinburgh University Press 22 George Square, Edinburgh EH8 9LF UK}
+}
+```
+```
+@article{zhao2013docuscope,
+  title={DocuScope for genre analysis: Potential for assessing pragmatic functions},
+  author={Zhao, Helen and Kaufer, David},
+  journal={Technology in interlanguage pragmatics research and teaching},
+  pages={235--260},
+  year={2013},
+  publisher={John Benjamins Amsterdam}
 }
 ```
