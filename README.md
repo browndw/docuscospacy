@@ -102,6 +102,7 @@ Load the model like any spaCy model:
 
 ```python
 import spacy
+from docuscospacy import corpus_analysis
 ```
 
 ```python
@@ -132,6 +133,15 @@ def pre_process(txt):
 ```python
 corp = Corpus.from_folder('my_corpus', spacy_instance=nlp, raw_preproc=[pre_process], spacy_token_attrs=['tag', 'ent_iob', 'ent_type', 'is_punct'])
 ```
+
+### Converting the corpus
+
+To take advange of the docuscospacy functions, the corpus needs to be converted:
+
+```python
+tp = convert_corpus(corp)
+```
+
 
 
 | Category (Cluster)|Description|Examples |
