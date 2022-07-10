@@ -6,7 +6,7 @@ import re
 from scipy.stats.distributions import chi2
 from collections import Counter
 
-import docuscospacy.corpus_utils 
+import docuscospacy.corpus_utils
 
 def convert_corpus(tm_corpus):
     """
@@ -16,7 +16,7 @@ def convert_corpus(tm_corpus):
     :return: a list of tuples
     """
     docs = doc_tokens(tm_corpus, with_attr=True)
-    tp = _convert_totuple(docs)
+    tp = corpus_utils._convert_totuple(docs)
     return(tp)
  
 def frequency_table(tok, n_tokens, count_by='pos'):
@@ -29,9 +29,9 @@ def frequency_table(tok, n_tokens, count_by='pos'):
     :return: a dataframe
     """
     if count_by == 'pos':
-        tc = _merge_tags(tok)
+        tc = corpus_utils._merge_tags(tok)
     if count_by == 'ds':
-        tc = _merge_ds(tok)
+        tc = corpus_utils._merge_ds(tok)
     phrase_range = []
     for i in range(0,len(tc)):
         phrase_range.append(list(set(tc[i])))
@@ -66,9 +66,9 @@ def tags_table(tok, n_tokens, count_by='pos'):
     :return: a dataframe
     """
     if count_by == 'pos':
-        tc = _count_tags(tok, n_tokens)
+        tc = corpus_utils._count_tags(tok, n_tokens)
     if count_by == 'ds':
-        tc = _count_ds(tok, n_tokens)
+        tc = corpus_utils._count_ds(tok, n_tokens)
     tag_counts = pd.DataFrame(tc, columns=['Tag', 'AF', 'RF', 'Range'])
     return(tag_counts)
 
@@ -86,9 +86,9 @@ def ngrams_table(tok, ng_span, n_tokens, count_by='pos'):
     if ng_span < 2 or ng_span > 5:
         raise ValueError("Span must be < " + str(2) + " and > " + str(5))
     if count_by == 'pos':
-        mtp = _merge_tags(tok)
+        mtp = corpus_utils._merge_tags(tok)
     if count_by == 'ds':
-        mtp = _merge_ds(tok)
+        mtp = corpus_utils._merge_ds(tok)
     ml = []
     for i in range(0,len(mtp)):
         ml.append(list('_tag_'.join(x) for x in mtp[i]))
@@ -151,9 +151,9 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
     if bool(tag_ignore) == True:
         node_tag = None
     if count_by == 'pos':
-        tc = _merge_tags(tok)
+        tc = corpus_utils._merge_tags(tok)
     if count_by == 'ds':
-        tc = _merge_ds(tok)
+        tc = corpus_utils._merge_ds(tok)
     in_span = []
     for i in range(0,len(tc)):
         tpf = tc[i]
