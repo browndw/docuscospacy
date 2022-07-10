@@ -1082,7 +1082,7 @@ def _child_names(tree):
         else:
             names.append(child)
     return names
-In [19]:
+
 def _conlltags2tree(
     sentence, chunk_types=("NP", "PP", "VP"), root_label="S", strict=False
 ):
