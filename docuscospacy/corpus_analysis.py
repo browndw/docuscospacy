@@ -6,7 +6,7 @@ import re
 from scipy.stats.distributions import chi2
 from collections import Counter
 
-from .corpus_utils import _convert_totuple, _merge_tags, _merge_ds, _count_tags, _count_ds, _log_like, _log_ratio
+from .corpus_utils import _convert_totuple, _merge_tags, _merge_ds, _count_tags, _count_ds, _log_like, _log_ratio, _get_ngrams
 
 def convert_corpus(tm_corpus):
     """
@@ -166,7 +166,7 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
             # get indices within window around the node
             idx = list(index_windows_around_matches(np.array(v), left=l_span, right=r_span, flatten=False))
             # remove node word from collocates
-            idx = np.delete(idx, l_span, axis=1)
+            idx = [np.delete(x, l_span, axis=0) for x in idx]
             idx = [x for xs in idx for x in xs]
             coll = [tpf[i] for i in idx]
         else:
