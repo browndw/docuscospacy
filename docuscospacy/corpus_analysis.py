@@ -234,7 +234,7 @@ def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
 
 
 def keyness_table(target_counts, ref_counts, total_target, total_reference, correct=False, tags_only=False):
-     """
+    """
     Generate a keyness table comparing token frequencies from a taget and a reference corpus
     
     :param target_counts: A frequency table from a target corpus
