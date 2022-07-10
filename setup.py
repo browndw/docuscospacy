@@ -18,6 +18,7 @@ INSTALL_REQUIRES = [
       'numpy>=1.22.0',
       'pandas>=1.4.0',
       'tmtoolkit>=0.11.0',
+      'spacy>=3.3.0',
       're',
       'string'
 ]
