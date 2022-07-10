@@ -46,7 +46,7 @@ def _groupby_consecutive(lst):
 
 
 def _merge_tags(tok):
-     """
+    """
     Merge part-of-speech tag sequences into a single token like 'for example' or 'in spite of'.
     
     :param tok: a tokens tuple object
