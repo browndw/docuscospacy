@@ -10,7 +10,7 @@ AUTHOR_EMAIL = 'dwb2@andrew.cmu.edu'
 URL = 'https://github.com/browndw/docuscospacy'
 
 LICENSE = 'Apache License 2.0'
-DESCRIPTION = 'Describe your package in one sentence'
+DESCRIPTION = 'Support for spaCy models trained on DocuScope and the CLAWS7 tagset'
 LONG_DESCRIPTION = (HERE / "README.md").read_text()
 LONG_DESC_TYPE = "text/markdown"
 
