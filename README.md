@@ -102,7 +102,6 @@ Load the model like any spaCy model:
 
 ```python
 import spacy
-from docuscospacy import corpus_analysis
 ```
 
 ```python
@@ -119,6 +118,7 @@ However, third-person possessive *its* should be split pior to taagging. It is a
 This can be accomplished with a simple function passed to a tmtoolkit corpus function:
 
 ```python
+from docuscospacy import corpus_analysis
 from tmtoolkit.corpus import Corpus
 ```
 
