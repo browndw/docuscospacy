@@ -114,7 +114,7 @@ def ngrams_table(tok, ng_span, n_tokens, count_by='pos'):
     # total_ngrams = sum(ngram_freq)
     # Note: using non_punct for normalization
     ngram_prop = np.array(ngram_freq)/n_tokens*1000000
-    ngram_range = np.array([x[1] for x in ngram_range])/len(tp)*100
+    ngram_range = np.array([x[1] for x in ngram_range])/len(tok)*100
     counts = list(zip(ngrams.tolist(), ngram_freq.tolist(), ngram_prop.tolist(), ngram_range.tolist()))
     ngram_counts = list()
     for x in counts:
@@ -174,36 +174,36 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
         in_span.append(coll)
     in_span = [x for xs in in_span for x in xs]
     tc = [x for xs in tc for x in xs]
-    df_total = pd.DataFrame(tc, columns=['token', 'tag'])
+    df_total = pd.DataFrame(tc, columns=['Token', 'Tag'])
     if bool(tag_ignore) == True:
-        df_total = df_total.drop(columns=['tag'])
+        df_total = df_total.drop(columns=['Tag'])
     if bool(tag_ignore) == True:
-        df_total = df_total.groupby(['token']).value_counts().to_frame('total_freq').reset_index()
+        df_total = df_total.groupby(['Token']).value_counts().to_frame('Freq Total').reset_index()
     else:
-        df_total = df_total.groupby(['token','tag']).value_counts().to_frame('total_freq').reset_index()
-    df_span = pd.DataFrame(in_span, columns=['token', 'tag'])
+        df_total = df_total.groupby(['Token','Tag']).value_counts().to_frame('Freq Total').reset_index()
+    df_span = pd.DataFrame(in_span, columns=['Token', 'Tag'])
     if bool(tag_ignore) == True:
-        df_span = df_span.drop(columns=['tag'])
+        df_span = df_span.drop(columns=['Tag'])
     if bool(tag_ignore) == True:
-        df_span = df_span.groupby(['token']).value_counts().to_frame('span_freq').reset_index()
+        df_span = df_span.groupby(['Token']).value_counts().to_frame('Freq Span').reset_index()
     else:
-        df_span = df_span.groupby(['token','tag']).value_counts().to_frame('span_freq').reset_index()
+        df_span = df_span.groupby(['Token','Tag']).value_counts().to_frame('Freq Span').reset_index()
     if node_tag is None:
-        node_freq = sum(df_total[df_total['token'] == node_word]['total_freq'])
+        node_freq = sum(df_total[df_total['Token'] == node_word]['Freq Total'])
     else:
-        node_freq = sum(df_total[(df_total['token'] == node_word) & (df_total['tag'].str.startswith(node_tag, na=False))]['total_freq'])
+        node_freq = sum(df_total[(df_total['Token'] == node_word) & (df_total['Tag'].str.startswith(node_tag, na=False))]['Freq Total'])
     if bool(tag_ignore) == True:
-        df = pd.merge(df_span, df_total, how='inner', on=['token'])
+        df = pd.merge(df_span, df_total, how='inner', on=['Token'])
     else:
-        df = pd.merge(df_span, df_total, how='inner', on=['token', 'tag'])
+        df = pd.merge(df_span, df_total, how='inner', on=['Token', 'Tag'])
     if statistic=='pmi':
-        df['MI'] = np.vectorize(pmi)(node_freq, df['total_freq'], df['span_freq'], sum(df_total['total_freq']), normalize=False)
+        df['MI'] = np.vectorize(pmi)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=False)
     if statistic=='npmi':
-        df['MI'] = np.vectorize(pmi)(node_freq, df['total_freq'], df['span_freq'], sum(df_total['total_freq']), normalize=True)
+        df['MI'] = np.vectorize(pmi)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=True)
     if statistic=='pmi2':
-        df['MI'] = np.vectorize(pmi2)(node_freq, df['total_freq'], df['span_freq'], sum(df_total['total_freq']))
+        df['MI'] = np.vectorize(pmi2)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
     if statistic=='pmi3':
-        df['MI'] = np.vectorize(pmi3)(node_freq, df['total_freq'], df['span_freq'], sum(df_total['total_freq']))
+        df['MI'] = np.vectorize(pmi3)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
     return(df)
 
 def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
