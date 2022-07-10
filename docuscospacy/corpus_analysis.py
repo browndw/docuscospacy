@@ -155,7 +155,7 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
     if count_by == 'ds':
         tc = _merge_ds(tok)
     in_span = []
-    for i in range(0,len(tc):
+    for i in range(0,len(tc)):
         tpf = tc[i]
         # create a boolean vector for node word
         if node_tag is None:
