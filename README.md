@@ -139,7 +139,7 @@ corp = Corpus.from_folder('my_corpus', spacy_instance=nlp, raw_preproc=[pre_proc
 To take advange of the docuscospacy functions, the corpus needs to be converted:
 
 ```python
-tp = convert_corpus(corp)
+tp = corpus_analysis.convert_corpus(corp)
 ```
 
 
