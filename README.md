@@ -253,13 +253,13 @@ The above would search 4 words to left and right of *can* tagged as a verb. It w
 | deicing|VV0|2|1|6.44 |
 | undone|VVN|2|1|6.44 |
 | diagnose|VVI|1|1|5.75 |
-| ferrets|NN1|1|1|5.75 |
-| uniforms|JJ|1|1|5.75 |
+| ferrets|NN2|1|1|5.75 |
+| uniforms|NN2|1|1|5.75 |
 | called|VVD|1|1|5.75 |
 | mask|VVI|1|1|5.75 |
-| stealthily|NN1|1|1|5.75 |
+| stealthily|RR|1|1|5.75 |
 | buzz|FU|1|1|5.75 |
-| parsimony|JJ|1|1|5.75 |
+| parsimony|NN1|1|1|5.75 |
 
 As with other functions, collocates can similarly be organized by DocuScope category by setting **count_by='ds'**:
 
