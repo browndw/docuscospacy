@@ -248,19 +248,6 @@ ct = corpus_analysis.coll_table(tp, 'can', node_tag='V', statistic='pmi', count_
 ```
 The above would search 4 words to left and right of *can* tagged as a verb. It would use Pointwise Mutual Informaton as the association measure (other options are 'npmi', 'pmi2' and 'pmi3'). It returns a data frame of the kind:
 
-|Token|Tag|Freq Span|Freq Total|MI|
-|---|---|---|---|---|---|---|
-| deicing|VV0|2|1|6.44 |
-| undone|VVN|2|1|6.44 |
-| diagnose|VVI|1|1|5.75 |
-| ferrets|NN1|1|1|5.75 |
-| uniforms|JJ|1|1|5.75 |
-| called|VVD|1|1|5.75 |
-| mask|VVI|1|1|5.75 |
-| stealthily|NN1|1|1|5.75 |
-| buzz|FU|1|1|5.75 |
-| parsimony|JJ|1|1|5.75 |
-
 
 ```python
 ct = coll_table(tp, 'society', node_tag='Public', statistic='npmi', count_by='ds')
