@@ -261,9 +261,10 @@ The above would search 4 words to left and right of *can* tagged as a verb. It w
 | buzz|FU|1|1|5.75 |
 | parsimony|JJ|1|1|5.75 |
 
+As with other functions, collocates can similarly be organized by DocuScope category by setting **count_by='ds'**:
 
 ```python
-ct = coll_table(tp, 'society', node_tag='Public', statistic='npmi', count_by='ds')
+ct = corpus_analysis.coll_table(tp, 'society', node_tag='Public', statistic='npmi', count_by='ds')
 ```
 
 | Category (Cluster)|Description|Examples |
