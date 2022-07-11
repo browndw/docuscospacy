@@ -267,6 +267,12 @@ As with other functions, collocates can similarly be organized by DocuScope cate
 ct = corpus_analysis.coll_table(tp, 'society', node_tag='Public', statistic='npmi', count_by='ds')
 ```
 
+Tags can be ignored by setting **tag_ignore=True**:
+
+```python
+ct = corpus_analysis.coll_table(tp, 'data', l_span=5, r_span=0, statistic='pmi', tag_ignore=True)
+```
+
 | Category (Cluster)|Description|Examples |
 |---|---|---|
 | Academic Terms|Abstract, rare, specialized, or disciplinary-specific terms that are indicative of informationally dense writing|*market price*, *storage capacity*, *regulatory*, *distribution* |
