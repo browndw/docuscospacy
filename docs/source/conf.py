@@ -14,11 +14,15 @@ author = 'David Brown'
 extensions = [
     'nbsphinx',
     'sphinx.ext.autodoc',
+    'sphinxcontrib.bibtex',
     'sphinx_rtd_theme'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+
+# Add path for bib files
+bibtex_bibfiles = ['refs.bib']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -26,6 +30,7 @@ templates_path = ['_templates']
 
 exclude_patterns = ['**.ipynb_checkpoints']
 
+bibtex_bibliography_header = ".. rubric:: References"
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
 add_function_parentheses = False
