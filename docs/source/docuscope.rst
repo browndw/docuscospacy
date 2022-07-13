@@ -21,6 +21,109 @@ With data sampled from `the Corpus of Contemporary American English <https://www
 
 `The model <https://huggingface.co/browndw/en_docusco_spacy>`_ eliminates the time and computational power needed to carry out all of those brute-force lookups, and is intended to make DocuScope's explanatory power more readily available to researchers, students, and NLP professionals.
 
+Model output
+------------
+
+Many DocuScope tokens are made up of multiple words. Thus, the model was trained using a NER pipeline and a typical IOB scheme.
+
+DocuScope tags can, therefore, be accessing using any of the **ent** attributes and the CLAWS7 tags using the **tag** attributes. (`You can check the outputs on a streamlit app <https://huggingface.co/spaces/browndw/docuscope-demo-spacy>`_
+.)
+
+For example, tokenizing the sentence:
+
+    Jaws is a shrewd cinematic equation which not only gives you one or two very nasty turns when you least expect them but, possibly more important, knows when to make you think another is coming without actually providing it.
+
+would produce:
+
++----+-----------+-------+------+-----------------------+
+|    | text      | tag\_ | ent\_| ent\_typ\e_           |
++----+-----------+-------+------+-----------------------+
+| 0  | Jaws      | NN1   | B    | Character             |
++----+-----------+-------+------+-----------------------+
+| 1  | is        | VBZ   | B    | InformationStates     |
++----+-----------+-------+------+-----------------------+
+| 2  | a         | AT1   | I    | InformationStates     |
++----+-----------+-------+------+-----------------------+
+| 3  | shrewd    | JJ    | B    | Strategic             |
++----+-----------+-------+------+-----------------------+
+| 4  | cinematic | JJ    | B    | PublicTerms           |
++----+-----------+-------+------+-----------------------+
+| 5  | equation  | NN1   | B    | AcademicTerms         |
++----+-----------+-------+------+-----------------------+
+| 6  | which     | DDQ   | B    | SyntacticComplexity   |
++----+-----------+-------+------+-----------------------+
+| 7  | not       | XX    | B    | ForceStressed         |
++----+-----------+-------+------+-----------------------+
+| 8  | only      | RR    | I    | ForceStressed         |
++----+-----------+-------+------+-----------------------+
+| 9  | gives     | VVZ   | B    | Interactive           |
++----+-----------+-------+------+-----------------------+
+| 10 | you       | PPY   | I    | Interactive           |
++----+-----------+-------+------+-----------------------+
+| 11 | one       | MC1   | O    |                       |
++----+-----------+-------+------+-----------------------+
+| 12 | or        | CC    | B    | MetadiscourseCohesive |
++----+-----------+-------+------+-----------------------+
+| 13 | two       | MC    | B    | InformationExposition |
++----+-----------+-------+------+-----------------------+
+| 14 | very      | RG    | B    | ConfidenceHigh        |
++----+-----------+-------+------+-----------------------+
+| 15 | nasty     | JJ    | B    | Negative              |
++----+-----------+-------+------+-----------------------+
+| 16 | turns     | NN2   | O    |                       |
++----+-----------+-------+------+-----------------------+
+| 17 | when      | RRQ   | B    | Narrative             |
++----+-----------+-------+------+-----------------------+
+| 18 | you       | PPY   | I    | Narrative             |
++----+-----------+-------+------+-----------------------+
+| 19 | least     | RRT   | B    | InformationExposition |
++----+-----------+-------+------+-----------------------+
+| 20 | expect    | VV0   | B    | Future                |
++----+-----------+-------+------+-----------------------+
+| 21 | them      | PPHO2 | B    | Narrative             |
++----+-----------+-------+------+-----------------------+
+| 22 | but       | CCB   | B    | MetadiscourseCohesive |
++----+-----------+-------+------+-----------------------+
+| 23 | ,         | Y     | B    | Contingent            |
++----+-----------+-------+------+-----------------------+
+| 24 | possibly  | RR    | I    | Contingent            |
++----+-----------+-------+------+-----------------------+
+| 25 | more      | RGR   | B    | InformationExposition |
++----+-----------+-------+------+-----------------------+
+| 26 | important | JJ    | I    | InformationExposition |
++----+-----------+-------+------+-----------------------+
+| 27 | ,         | Y     | O    |                       |
++----+-----------+-------+------+-----------------------+
+| 28 | knows     | VVZ   | B    | ConfidenceHigh        |
++----+-----------+-------+------+-----------------------+
+| 29 | when      | RRQ   | I    | ConfidenceHigh        |
++----+-----------+-------+------+-----------------------+
+| 30 | to        | TO    | O    |                       |
++----+-----------+-------+------+-----------------------+
+| 31 | make      | VVI   | B    | Interactive           |
++----+-----------+-------+------+-----------------------+
+| 32 | you       | PPY   | I    | Interactive           |
++----+-----------+-------+------+-----------------------+
+| 33 | think     | VVI   | B    | Character             |
++----+-----------+-------+------+-----------------------+
+| 34 | another   | DD1   | B    | MetadiscourseCohesive |
++----+-----------+-------+------+-----------------------+
+| 35 | is        | VBZ   | B    | InformationStates     |
++----+-----------+-------+------+-----------------------+
+| 36 | coming    | VVG   | O    |                       |
++----+-----------+-------+------+-----------------------+
+| 37 | without   | IW    | O    |                       |
++----+-----------+-------+------+-----------------------+
+| 38 | actually  | RR    | B    | ForceStressed         |
++----+-----------+-------+------+-----------------------+
+| 39 | providing | VVG   | B    | Facilitate            |
++----+-----------+-------+------+-----------------------+
+| 40 | it        | PPH1  | O    |                       |
++----+-----------+-------+------+-----------------------+
+| 41 | .         | Y     | O    |                       |
++----+-----------+-------+------+-----------------------+
+
+
 Categories
 ----------
 +-----------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------+
@@ -102,4 +205,5 @@ Categories
 +-----------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------+
 
 
-.. footbibliography::
+.. bibliography:: refs.bib
+    :style: plain

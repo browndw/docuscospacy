@@ -1,0 +1,18 @@
+This means that it must now be considered for parliamentary debate.
+Internet providers will soon have to record which services their customers' devices connect to - including websites and messaging apps.
+They must keep this information for one year and share it with various departments and organisations on demand.
+The government says it will help in the fight against terrorism.
+Its critics have named it the "snoopers' charter", and it is described in the petition as "an absolute disgrace to both privacy and freedom".
+The act was first proposed by Prime Minister Theresa May when she was Home Secretary and was approved by the House of Lords on 19 November.
+It is expected to become law by the end of 2016.
+Blogger Chris Yiu compiled a list of the 48 organisations and departments that will be able to access the browsing records of individuals without a warrant.
+They include various police, military, government and NHS departments as well as the Food Standards Agency, the Gambling Commission, the Financial Conduct Authority and the Health and Safety Executive.
+The required data covers only the domain name of each site visited - www.facebook.com or www.bbc.com, for example - not the individual pages within them.
+"So long right to privacy, hello 1984," wrote Mr Yiu.
+The chairman of the Internet Service Providers' Association (Ispa), told the BBC last week that he was concerned such a database would eventually be hacked.
+"You can try every conceivable thing in the entire world to [protect it], but somebody will still outsmart you," he said.
+"Mistakes will happen. It's a question of when. Hopefully it's in tens or maybe a hundred years. But it might be next week."
+The government's Joint Committee on Human Rights said in June that the data gathering was "capable of being justified".
+"The bill provides a clear and transparent basis for powers already in use by the security and intelligence services, but there need to be further safeguards," said Harriet Harman, chairing the committee.
+Jim Killock, director of the Open Rights Group, wrote in a blog post for the Huffington Post that "not all of the bill is completely bad" but that the issue of data retention and security needed addressing.
+He described the creation of a database of internet connection records that was searchable by the authorities as "incredibly intrusive".
