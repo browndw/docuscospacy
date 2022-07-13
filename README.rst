@@ -15,8 +15,7 @@ The documentation for docuscospacy is available on `docuscospacy.readthedocs.org
 Requirements and installation
 -----------------------------
 
-**docuscospacy works with Python 3.8 or newer (tested up to Python 3.10).** It also requires `spacy >= 3.3 <https://spacy.io/usage>`_
-.
+**docuscospacy works with Python 3.8 or newer (tested up to Python 3.10).** It also requires `spacy >= 3.3 <https://spacy.io/usage>`_.
 
 The recommended way of installing *docuscospacy* is to:
 
@@ -38,21 +37,21 @@ Corpus analysis
 
 The docuscospacy package supports the post-tagging generation of:
 
-- Tagged token frequency tables
-- Tag frequency tables
-- Ngram/ntag tables
-- Collocation tables around a node word and tag
-- Document term matrices for tags
-- Keyword comparisions against a reference corpus
+- `Tagged token frequency tables <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Frequency-tables>`_
+- `Tag frequency tables <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Tags-tables>`_
+- `Ngram/ntag tables <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Ngram-tables>`_
+- `Collocation tables around a node word and tag <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Collocations>`_
+- `Document term matrices for tags <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Document-term-matrices-for-tags>`_
+- `Keyword comparisons against a reference corpus <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Keyword-tables>`_
 
-**Outputs can be contolled either by part-of-speech or by DocuScope tag**. Thus, *can* as noun and *can* as verb, for example, can be disambiguated.
+**Outputs can be controlled either by part-of-speech or by DocuScope tag**. Thus, *can* as noun and *can* as verb, for example, can be disambiguated.
 
-Additionally, tagged multi-token sequencies are aggregatated for analysis. So, for example, where *in spite of* is tagged as a token sequence, it is combined into a signle token.
+Additionally, tagged multi-token sequences are aggregated for analysis. So, for example, where *in spite of* is tagged as a token sequence, it is combined into a single token.
 
 Other features
 ^^^^^^^^^^^^^^
 
-- KWIC tables that locate a node word in a center column with context columns on either side
+- `KWIC tables <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#KWIC-tables>`_ that locate a node word in a center column with context columns on either side
 
 Limits
 ------
@@ -84,6 +83,6 @@ See `LICENSE <https://github.com/browndw/docuscospacy/blob/master/LICENSE>`_ fil
     :target: https://docuscospacy.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-.. |zenodo| image:: https://zenodo.org/badge/109812180.svg
-    :target: https://zenodo.org/badge/latestdoi/109812180
+.. |zenodo| image:: https://zenodo.org/badge/512227318.svg
+    :target: https://zenodo.org/badge/latestdoi/512227318
     :alt: Citable Zenodo DOI
