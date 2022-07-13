@@ -270,30 +270,30 @@ def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
     return(df)
 
 
-def keyness_table(target_counts, ref_counts, total_target, total_reference, correct=False, tags_only=False):
+def keyness_table(target_counts, ref_counts, correct=False, tags_only=False):
     """
     Generate a keyness table comparing token frequencies from a taget and a reference corpus
     
     :param target_counts: A frequency table from a target corpus
     :param ref_counts: A frequency table from a reference corpus
-    :param total_target: Total number of tokens in the target corpus
-    :param total_target: Total number of tokens in the reference corpus
     :param correct: If True, apply the Yates correction to the log-likelihood calculation
     :param tags_only: If True, it is assumed the frequency tables are of the type produce by the tags_table function
     :return: a dataframe
     """
+    total_target = target_counts['AF'].sum()
+    total_reference = ref_counts['AF'].sum()
     if bool(tags_only) == True:
-        target_counts.columns=['Tag','AF', 'RF', 'Range']
+        df_1 = target_counts.set_axis(['Tag','AF', 'RF', 'Range'], axis=1, inplace=False)
     else:
-        target_counts.columns=['Token', 'Tag','AF', 'RF', 'Range']
+        df_1 = target_counts.set_axis(['Token', 'Tag','AF', 'RF', 'Range'], axis=1, inplace=False)
     if bool(tags_only) == True:
-        ref_counts.columns=['Tag', 'AF Ref', 'RF Ref', 'Range Ref']
+        df_2 = ref_counts.set_axis(['Tag', 'AF Ref', 'RF Ref', 'Range Ref'], axis=1, inplace=False)
     else:
-        ref_counts.columns=['Token', 'Tag', 'AF Ref', 'RF Ref', 'Range Ref']
+        df_2 = ref_counts.set_axis(['Token', 'Tag', 'AF Ref', 'RF Ref', 'Range Ref'], axis=1, inplace=False)
     if bool(tags_only) == True:
-        df = pd.merge(target_counts, ref_counts, how='outer', on=['Tag'])
+        df = pd.merge(df_1, df_2, how='outer', on=['Tag'])
     else:
-        df = pd.merge(target_counts, ref_counts, how='outer', on=['Token', 'Tag'])
+        df = pd.merge(df_1, df_2, how='outer', on=['Token', 'Tag'])
     df.fillna(0, inplace=True)
     if bool(correct) == True:
         df['LL'] = np.vectorize(_log_like)(df['AF'], df['AF Ref'], total_target, total_reference, correct=True)

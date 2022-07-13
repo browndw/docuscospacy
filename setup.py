@@ -12,7 +12,7 @@ URL = 'https://github.com/browndw/docuscospacy'
 LICENSE = 'Apache License 2.0'
 DESCRIPTION = 'Support for spaCy models trained on DocuScope and the CLAWS7 tagset'
 LONG_DESCRIPTION = (HERE / "README.rst").read_text()
-LONG_DESC_TYPE = "text/markdown"
+LONG_DESC_TYPE = "text/x-rst"
 
 INSTALL_REQUIRES = [
       'numpy>=1.22.0',
