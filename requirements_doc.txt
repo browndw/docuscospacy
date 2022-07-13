@@ -3,4 +3,13 @@
 # installs doc dependencies from ./setup.py, and the package itself,
 # in editable mode for development
 
--e .[doc]
+channels:
+  - conda-forge
+dependencies:
+  - python==3.5
+  - sphinx>=1.4
+  - pandoc
+  - nbconvert
+  - ipykernel
+  - pip:
+    - nbsphinx
