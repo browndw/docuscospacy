@@ -1,5 +1,11 @@
 # Configuration file for the Sphinx documentation builder.
 
+import os
+import sys
+from datetime import date
+
+import sphinx_rtd_theme
+
 # -- Project information
 
 project = 'docuscospacy'
