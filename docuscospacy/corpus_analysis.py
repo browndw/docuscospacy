@@ -1,3 +1,8 @@
+"""
+Functions for analyzing corpus data tagged with DocuScope and CLAWS7.
+.. codeauthor:: David Brown <dwb2d@andrew.cmu.edu>
+"""
+
 from tmtoolkit.corpus import doc_tokens, kwic
 from tmtoolkit.tokenseq import pmi, pmi2, pmi3, index_windows_around_matches
 import numpy as np
