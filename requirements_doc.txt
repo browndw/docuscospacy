@@ -3,7 +3,7 @@
 # installs doc dependencies from ./setup.py, and the package itself,
 # in editable mode for development
 
-sphinx>=1.4
+sphinx>=4.4.0
 ipykernel
-nbsphinx
-sphinxcontrib.bibtex
+nbsphinx>=0.8.0
+sphinxcontrib.bibtex>=2.4
