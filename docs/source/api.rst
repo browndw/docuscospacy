@@ -6,13 +6,13 @@ API
 corpus_analysis.convert_corpus
 ------------------------------
 
-.. automodule:: docuscospacy.corpus_analysis.convert_corpus
+.. automodule:: corpus_analysis.convert_corpus
     :members:
 
 corpus_analysis.frequency_table
 -------------------------------
 
-.. automodule:: docuscospacy.corpus_analysis.frequency_table
+.. automodule:: corpus_analysis.frequency_table
     :members:
 
 corpus_analysis.tags_table
