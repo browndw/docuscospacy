@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '0.1.0'
+VERSION = '0.1.2'
 PACKAGE_NAME = 'docuscospacy'
 AUTHOR = 'David Brown'
 AUTHOR_EMAIL = 'dwb2@andrew.cmu.edu'
@@ -18,7 +18,9 @@ INSTALL_REQUIRES = [
       'numpy>=1.22.0',
       'pandas>=1.4.0',
       'tmtoolkit>=0.11.0',
-      'spacy>=3.3.0'
+      'spacy>=3.3.0',
+      'bidict>=0.21.0',
+      'loky>=3.0.0'
 ]
 
 setup(name=PACKAGE_NAME,

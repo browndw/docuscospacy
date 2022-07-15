@@ -67,7 +67,7 @@ def _merge_tags(tok):
             x[0] = re.sub('\\d+', 'B-', str(x[0]))
         tag_seq = [x for xs in tag_seq for x in xs]
         tag_seq = ['I-' if isinstance(x, int) else x for x in tag_seq]
-        tag_seq = ["{}{:02}".format(a_, b_) for a_, b_ in zip(tag_seq, tag_list)]
+        tag_seq = [a_+str(b_) for a_,b_ in zip(tag_seq, tag_list)]
         tag_seq = [re.sub(r'\d\d$', '', x) for x in tag_seq]
         token_tp = list(zip(token_list, tag_list, tag_seq))
         ne_tree = _conlltags2tree(token_tp)
