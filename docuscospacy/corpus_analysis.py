@@ -240,13 +240,13 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
     else:
         df = pd.merge(df_span, df_total, how='inner', on=['Token', 'Tag'])
     if statistic=='pmi':
-        df['MI'] = np.vectorize(pmi)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=False)
+        df['MI'] = pmi(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=False)
     if statistic=='npmi':
-        df['MI'] = np.vectorize(pmi)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=True)
+        df['MI'] = pmi(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=True)
     if statistic=='pmi2':
-        df['MI'] = np.vectorize(pmi2)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
+        df['MI'] = pmi2(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
     if statistic=='pmi3':
-        df['MI'] = np.vectorize(pmi3)(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
+        df['MI'] = pmi3(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
     return(df)
 
 def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
