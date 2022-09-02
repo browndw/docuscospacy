@@ -313,7 +313,7 @@ def keyness_table(target_counts, ref_counts, correct=False, tags_only=False):
     df['PV'] = chi2.sf(df['LL'], 1)
     df.PV = df.PV.round(5)
     if bool(tags_only) == True:
-    	df = df.iloc[:, [0,7,8,9,2,3,4,5,6]]
+    	df = df.iloc[:, [0,7,8,9,1,2,3,4,5,6]]
     else:
     	df = df.iloc[:, [0,1,8,9,10,2,3,4,5,6,7]]
     df.sort_values(by=['LL', 'Token'], ascending=[False, True], inplace=True)
