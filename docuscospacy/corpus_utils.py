@@ -213,6 +213,10 @@ def _log_like(n_target, n_reference, total_target, total_reference, correct=Fals
     L1 = 0 if n_a == 0 else n_a*np.log(n_a/expected_a)
     L2 = 0 if n_b == 0 else n_b*np.log(n_b/expected_b)
     likelihood = 2*(L1 + L2)
+    if n_target/total_target > n_reference/total_reference:
+        likelihood = likelihood
+    else:
+        likelihood = -likelihood
     return(likelihood)
 
 
