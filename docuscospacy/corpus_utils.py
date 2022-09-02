@@ -53,7 +53,9 @@ def _merge_tags(tok):
     
     :param tok: a tokens tuple object
     """
-    p = re.compile('[a-z]+')
+    tok = [[(word.lower(), tag, ds) for word, tag, ds in element] for element in tok]
+    tok = [[(word.strip(), tag, ds) for word, tag, ds in element] for element in tok]
+    p = re.compile('[a-z]')
     phrase_list = []
     for i in range(0,len(tok)):
         # filter out strings that don't contain at least one alphabetic character
@@ -78,7 +80,7 @@ def _merge_tags(tok):
                 original_label = subtree.label()
                 original_string = " ".join([token for token, pos in subtree.leaves()])
             else:
-                original_label = 'O'
+                original_label = 'Untagged'
                 original_string = subtree[0]
             agg_tokens.append((original_string, original_label))
         phrase_list.append(agg_tokens)
@@ -90,11 +92,13 @@ def _merge_ds(tok):
     
     :param tok: a tokens tuple object
     """
-    p = re.compile('[^a-z]+')
+    tok = [[(word.lower(), tag, ds) for word, tag, ds in element] for element in tok]
+    tok = [[(word.strip(), tag, ds) for word, tag, ds in element] for element in tok]
+    p = re.compile('[a-z]')
     phrase_list = []
     for i in range(0,len(tok)):
         # filter out strings that don't contain at least one alphabetic character
-        tpf = [x for x in tok[i] if not (x[2] == 'O-' and p.search(x[0]))]
+        tpf = [x for x in tok[i] if not (x[2] == 'O-' and bool(p.search(x[0])) == False)]
         ne_tree = _conlltags2tree(tpf)
         agg_tokens = []
         for subtree in ne_tree:
@@ -102,7 +106,7 @@ def _merge_ds(tok):
                 original_label = subtree.label()
                 original_string = " ".join([token for token, pos in subtree.leaves()])
             else:
-                original_label = 'O'
+                original_label = 'Untagged'
                 original_string = subtree[0]
             agg_tokens.append((original_string, original_label))
         phrase_list.append(agg_tokens)
