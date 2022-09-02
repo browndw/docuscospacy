@@ -21,7 +21,9 @@ def _convert_totuple(tok):
     is_punct = re.compile("[{}]+$".format(re.escape(string.punctuation)))
     is_digit = re.compile("[\d{}]+$".format(re.escape(string.punctuation)))
     for i in range(0,len(tok)):
-        token_list = [x.lower() for x in list(tok.values())[i]['token']]
+        token_list = list(tok.values())[i]['token']
+        ws_list = list(tok.values())[i]['whitespace']
+        token_list = list(map(''.join, zip(token_list, ws_list)))
         iob_list = list(tok.values())[i]['ent_iob']
         iob_list = [x.replace('IS_DIGIT','B') for x in iob_list]
         iob_list = [x.replace('IS_ALPHA','I') for x in iob_list]
@@ -34,7 +36,6 @@ def _convert_totuple(tok):
         tag_list = ['MC' if bool(is_digit.match(token_list[i])) and tag_list[i] != 'Y' else v for i, v in enumerate(tag_list)]
         token_tuple.append(list(zip(token_list, tag_list, iob_ent)))
     return(token_tuple)
-
 
 def _groupby_consecutive(lst):
     """
