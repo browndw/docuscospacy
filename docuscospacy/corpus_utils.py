@@ -18,8 +18,8 @@ def _convert_totuple(tok):
     :param tok: a tmtoolkit tokens object
     """
     token_tuple = []
-    is_punct = re.compile("[{}]+$".format(re.escape(string.punctuation)))
-    is_digit = re.compile("[\d{}]+$".format(re.escape(string.punctuation)))
+    is_punct = re.compile("[{}]+\s+$".format(re.escape(string.punctuation)))
+    is_digit = re.compile("\d[\d{}]+\s+$".format(re.escape(string.punctuation)))
     for i in range(0,len(tok)):
         token_list = list(tok.values())[i]['token']
         ws_list = list(tok.values())[i]['whitespace']
