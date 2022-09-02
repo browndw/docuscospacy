@@ -11,7 +11,7 @@ import re
 from scipy.stats.distributions import chi2
 from collections import Counter
 
-from .corpus_utils import _convert_totuple, _merge_tags, _merge_ds, _count_tags, _count_ds, _log_like, _log_ratio, _get_ngrams
+from .corpus_utils import _convert_totuple, _merge_tags, _merge_ds, _count_tags, _count_ds, _log_like, _log_ratio, _get_ngrams, _groupby_consecutive, _conlltags2tree
 
 def convert_corpus(tm_corpus):
     """
