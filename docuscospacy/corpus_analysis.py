@@ -62,7 +62,7 @@ def frequency_table(tok, n_tokens, count_by='pos'):
     phrase_range = phrase_range.round(decimals=2)
     phrase_counts = list(zip(phrases.tolist(), tags.tolist(), phrase_freq.tolist(), phrase_prop.tolist(), phrase_range.tolist()))
     phrase_counts = pd.DataFrame(phrase_counts, columns=['Token', 'Tag', 'AF', 'RF', 'Range'])
-    phrase_counts.sort_values(by['AF', 'Token'], ascending=[False, True], inplace=True)
+    phrase_counts.sort_values(by=['AF', 'Token'], ascending=[False, True], inplace=True)
     return(phrase_counts)
 
 def tags_table(tok, n_tokens, count_by='pos'):
@@ -80,7 +80,7 @@ def tags_table(tok, n_tokens, count_by='pos'):
     if count_by == 'ds':
         tc = _count_ds(tok, n_tokens)
     tag_counts = pd.DataFrame(tc, columns=['Tag', 'AF', 'RF', 'Range'])
-    tag_counts.sort_values(by=['AF', 'Token'], ascending=[False, True], inplace=True)
+    tag_counts.sort_values(by=['AF', 'Tag'], ascending=[False, True], inplace=True)
     return(tag_counts)
 
 def tags_dtm(tok, count_by='pos'):
@@ -169,7 +169,7 @@ def ngrams_table(tok, ng_span, n_tokens, count_by='pos'):
                 tt += (*y,)
         ngram_counts.append(tt)
     ngram_counts = pd.DataFrame(ngram_counts, columns=['Token' + str(i) for i in range (1, ng_span+1)] + ['Tag' + str(i) for i in range (1, ng_span+1)] + ['AF', 'RF', 'Range'])
-    ngram_counts.sort_values(by=['AF', 'Token'], ascending=[False, True], inplace=True)
+    ngram_counts.sort_values(by=['AF', 'Token1'], ascending=[False, True], inplace=True)
     return(ngram_counts)
 
 def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='pos', node_tag=None, tag_ignore=False):
