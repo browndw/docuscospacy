@@ -20,7 +20,7 @@ def convert_corpus(tm_corpus):
     :param tm_corpus: A tmtoolkit corpus
     :return: a dictionary of tuples
     """
-    docs = doc_tokens(tm_corpus, with_attr=True)
+    docs = doc_tokens(tm_corpus, with_attr=['token', 'whitespace', 'ent_iob', 'ent_type', 'tag'])
     tp = _convert_totuple(docs)
     d = {tm_corpus.doc_labels[i]: tp[i] for i in range(0,len(tp))}
     return(d)
@@ -62,6 +62,7 @@ def frequency_table(tok, n_tokens, count_by='pos'):
     phrase_range = phrase_range.round(decimals=2)
     phrase_counts = list(zip(phrases.tolist(), tags.tolist(), phrase_freq.tolist(), phrase_prop.tolist(), phrase_range.tolist()))
     phrase_counts = pd.DataFrame(phrase_counts, columns=['Token', 'Tag', 'AF', 'RF', 'Range'])
+    phrase_counts.sort_values(by='AF', inplace=True, ascending=False)
     return(phrase_counts)
 
 def tags_table(tok, n_tokens, count_by='pos'):
@@ -79,6 +80,7 @@ def tags_table(tok, n_tokens, count_by='pos'):
     if count_by == 'ds':
         tc = _count_ds(tok, n_tokens)
     tag_counts = pd.DataFrame(tc, columns=['Tag', 'AF', 'RF', 'Range'])
+    tag_counts.sort_values(by='AF', inplace=True, ascending=False)
     return(tag_counts)
 
 def tags_dtm(tok, count_by='pos'):
@@ -167,6 +169,7 @@ def ngrams_table(tok, ng_span, n_tokens, count_by='pos'):
                 tt += (*y,)
         ngram_counts.append(tt)
     ngram_counts = pd.DataFrame(ngram_counts, columns=['Token' + str(i) for i in range (1, ng_span+1)] + ['Tag' + str(i) for i in range (1, ng_span+1)] + ['AF', 'RF', 'Range'])
+    ngram_counts.sort_values(by='AF', inplace=True, ascending=False)
     return(ngram_counts)
 
 def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='pos', node_tag=None, tag_ignore=False):
@@ -247,6 +250,7 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
         df['MI'] = pmi2(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
     if statistic=='pmi3':
         df['MI'] = pmi3(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
+    df.sort_values(by='MI', inplace=True, ascending=False)
     return(df)
 
 def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
@@ -308,4 +312,6 @@ def keyness_table(target_counts, ref_counts, correct=False, tags_only=False):
     df['LR'] = np.vectorize(_log_ratio)(df['AF'], df['AF Ref'], total_target, total_reference)
     df['PV'] = chi2.sf(df['LL'], 1)
     df.PV = df.PV.round(5)
+    df = df.iloc[:, [0,7,8,9,1,2,3,4,5,6]]
+    df.sort_values(by='LL', inplace=True, ascending=False)
     return(df)
