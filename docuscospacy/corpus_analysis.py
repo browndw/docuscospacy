@@ -63,6 +63,7 @@ def frequency_table(tok, n_tokens, count_by='pos'):
     phrase_counts = list(zip(phrases.tolist(), tags.tolist(), phrase_freq.tolist(), phrase_prop.tolist(), phrase_range.tolist()))
     phrase_counts = pd.DataFrame(phrase_counts, columns=['Token', 'Tag', 'AF', 'RF', 'Range'])
     phrase_counts.sort_values(by=['AF', 'Token'], ascending=[False, True], inplace=True)
+    phrase_counts.reset_index(drop=True, inplace=True)
     return(phrase_counts)
 
 def tags_table(tok, n_tokens, count_by='pos'):
@@ -81,6 +82,7 @@ def tags_table(tok, n_tokens, count_by='pos'):
         tc = _count_ds(tok, n_tokens)
     tag_counts = pd.DataFrame(tc, columns=['Tag', 'AF', 'RF', 'Range'])
     tag_counts.sort_values(by=['AF', 'Tag'], ascending=[False, True], inplace=True)
+    tag_counts.reset_index(drop=True, inplace=True)
     return(tag_counts)
 
 def tags_dtm(tok, count_by='pos'):
@@ -170,6 +172,7 @@ def ngrams_table(tok, ng_span, n_tokens, count_by='pos'):
         ngram_counts.append(tt)
     ngram_counts = pd.DataFrame(ngram_counts, columns=['Token' + str(i) for i in range (1, ng_span+1)] + ['Tag' + str(i) for i in range (1, ng_span+1)] + ['AF', 'RF', 'Range'])
     ngram_counts.sort_values(by=['AF', 'Token1'], ascending=[False, True], inplace=True)
+    ngram_counts.reset_index(drop=True, inplace=True)
     return(ngram_counts)
 
 def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='pos', node_tag=None, tag_ignore=False):
@@ -251,6 +254,7 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
     if statistic=='pmi3':
         df['MI'] = pmi3(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
     df.sort_values(by=['MI', 'Token'], ascending=[False, True], inplace=True)
+    df.reset_index(drop=True, inplace=True)
     return(df)
 
 def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
@@ -264,16 +268,17 @@ def kwic_center_node(tm_corpus, node_word,  ignore_case=True, glob=False):
     :return: a dataframe with the node word in a center column and context columns on either side.
     """
     if bool(glob)==False:
-        kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=ignore_case)
+        kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=ignore_case, highlight_keyword="##")
     else:
-        kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=ignore_case, match_type='glob')
+        kl = kwic(tm_corpus, node_word, context_size=10, ignore_case=ignore_case, match_type='glob', highlight_keyword="##")
     keys = [k for k in kl.keys() for v in kl[k]]
     token_list = [v for k in kl.keys() for v in kl[k]]
-    pre_node = [' '.join(l[:10]) for l in token_list]
+    node_idx = [i for x in range(len(token_list)) for i in range(len(token_list[x])) if token_list[x][i].startswith('##') and token_list[x][i].endswith('##') and len(token_list[x][i]) > 2]
+    pre_node = [' '.join(token_list[i][:node_idx[i]]) for i in range(len(token_list))]
     # set a span after which characters are trimmed for display
     pre_node = [('..' + l[len(l)-75:]) if len(l) > 75 else l for l in pre_node]
-    node = [l[10] for l in token_list]
-    post_node = [' '.join(l[11:]) for l in token_list]
+    node = [token_list[i][node_idx[i]].replace('##', '') for i in range(len(token_list))]
+    post_node = [' '.join(token_list[i][node_idx[i] + 1:]) for i in range(len(token_list))]
     # apply same trim span
     post_node = [(l[:75] + '..') if len(l) > 75 else l for l in post_node]
     df = pd.DataFrame.from_dict({'Doc': keys, 'Pre-Node': pre_node, 'Node': node, 'Post-Node': post_node})
@@ -318,6 +323,7 @@ def keyness_table(target_counts, ref_counts, correct=False, tags_only=False):
     else:
         df = df.iloc[:, [0,1,8,9,10,2,3,4,5,6,7]]
         df.sort_values(by=['LL', 'Token'], ascending=[False, True], inplace=True)
+    df.reset_index(drop=True, inplace=True)
     return(df)
 
 def tag_ruler(tok, key, count_by='pos'):
