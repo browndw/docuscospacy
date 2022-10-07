@@ -24,7 +24,6 @@ def convert_corpus(tm_corpus):
     tp = _convert_totuple(docs)
     d = {tm_corpus.doc_labels[i]: tp[i] for i in range(0,len(tp))}
     return(d)
-    return(tp)
  
 def frequency_table(tok, n_tokens, count_by='pos'):
     """
@@ -214,10 +213,11 @@ def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='po
         if sum(v) > 0:
             # get indices within window around the node
             idx = list(index_windows_around_matches(np.array(v), left=l_span, right=r_span, flatten=False))
+            node_idx = [i for i, x in enumerate(v) if x == True]
             # remove node word from collocates
-            idx = [np.delete(x, l_span, axis=0) for x in idx]
-            idx = [x for xs in idx for x in xs]
-            coll = [tpf[i] for i in idx]
+            coll_idx = [np.setdiff1d(idx[i], node_idx[i]) for i in range(len(idx))]
+            coll_idx = [x for xs in coll_idx for x in xs]
+            coll = [tpf[i] for i in coll_idx]
         else:
             coll = []
         in_span.append(coll)
