@@ -4,6 +4,7 @@
 # in editable mode for development
 
 sphinx>=4.4.0
+sphinx-rtd-theme==1.2.2
 ipykernel
 nbsphinx>=0.8.0
 sphinxcontrib.bibtex>=2.4
