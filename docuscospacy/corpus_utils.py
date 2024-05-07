@@ -7,9 +7,11 @@ Misc. utility functions for corpus processing.
 import string
 import re
 import numpy as np
+from functools import partial
 from itertools import groupby, islice
 from collections import Counter
 from operator import itemgetter
+from typing import Union, List, Callable, Optional
 
 def _convert_totuple(tok):
     """
@@ -46,6 +48,67 @@ def _groupby_consecutive(lst):
     for _, g in groupby(enumerate(lst), lambda x: x[0] - x[1]):
         yield list(map(itemgetter(1), g))
 
+
+# https://github.com/WZBSocialScienceCenter/tmtoolkit/blob/master/tmtoolkit/tokenseq.py
+def _index_windows_around_matches(matches: np.ndarray, left: int, right: int,
+                                 flatten: bool = False, remove_overlaps: bool = True) \
+        -> Union[List[List[int]], np.ndarray]:
+    """
+    Take a boolean 1D array `matches` of length N and generate an array of indices, where each occurrence of a True
+    value in the boolean vector at index i generates a sequence of the form:
+
+    .. code-block:: text
+
+        [i-left, i-left+1, ..., i, ..., i+right-1, i+right, i+right+1]
+
+    If `flatten` is True, then a flattened NumPy 1D array is returned. Otherwise, a list of NumPy arrays is returned,
+    where each array contains the window indices.
+
+    `remove_overlaps` is only applied when `flatten` is True.
+
+    Example with ``left=1 and right=1, flatten=False``:
+
+    .. code-block:: text
+
+        input:
+        #   0      1      2      3     4      5      6      7     8
+        [True, True, False, False, True, False, False, False, True]
+        output (matches *highlighted*):
+        [[0, *1*], [0, *1*, 2], [3, *4*, 5], [7, *8*]]
+
+    Example with ``left=1 and right=1, flatten=True, remove_overlaps=True``:
+
+    .. code-block:: text
+
+        input:
+        #   0      1      2      3     4      5      6      7     8
+        [True, True, False, False, True, False, False, False, True]
+        output (matches *highlighted*, other values belong to the respective "windows"):
+        [*0*, *1*, 2, 3, *4*, 5, 7, *8*]
+    """
+    if not isinstance(matches, np.ndarray) or matches.dtype != bool:
+        raise ValueError('`matches` must be a boolean NumPy array')
+    if not isinstance(left, int) or left < 0:
+        raise ValueError('`left` must be an integer >= 0')
+    if not isinstance(right, int) or right < 0:
+        raise ValueError('`right` must be an integer >= 0')
+
+    ind = np.where(matches)[0]
+    nested_ind = list(map(lambda x: np.arange(x - left, x + right + 1), ind))
+
+    if flatten:
+        if not nested_ind:
+            return np.array([], dtype=int)
+
+        window_ind = np.concatenate(nested_ind)
+        window_ind = window_ind[(window_ind >= 0) & (window_ind < len(matches))]
+
+        if remove_overlaps:
+            return np.sort(np.unique(window_ind))
+        else:
+            return window_ind
+    else:
+        return [w[(w >= 0) & (w < len(matches))] for w in nested_ind]
 
 def _merge_tags(tok):
     """
@@ -234,6 +297,188 @@ def _log_ratio(n_target, n_reference, total_target, total_reference):
     ratio = np.log2(percent_a / percent_b)
     return(ratio)
 
+
+# https://github.com/WZBSocialScienceCenter/tmtoolkit/blob/master/tmtoolkit/tokenseq.py
+def _PMI(x: np.ndarray, y: np.ndarray, xy: np.ndarray, n_total: Optional[int] = None, logfn: Callable = np.log2,
+        k: int = 1, normalize: bool = False) -> np.ndarray:
+    """
+    Calculate pointwise mutual information measure (PMI) either from probabilities p(x), p(y), p(x, y) given as `x`,
+    `y`, `xy`, or from total counts `x`, `y`, `xy` and additionally `n_total`. Setting `k` > 1 gives PMI^k variants.
+    Setting `normalized` to True gives normalized PMI (NPMI) as in [Bouma2009]_. See [RoleNadif2011]_ for a comparison
+    of PMI variants.
+
+    Probabilities should be such that ``p(x, y) <= min(p(x), p(y))``.
+
+    :param x: probabilities p(x) or count of occurrence of x (interpreted as count if `n_total` is given)
+    :param y: probabilities p(y) or count of occurrence of y (interpreted as count if `n_total` is given)
+    :param xy: probabilities p(x, y) or count of occurrence of x *and* y (interpreted as count if `n_total` is given)
+    :param n_total: if given, `x`, `y` and `xy` are interpreted as counts with `n_total` as size of the sample space
+    :param logfn: logarithm function to use (default: ``np.log`` – natural logarithm)
+    :param k: if `k` > 1, calculate PMI^k variant
+    :param normalize: if True, normalize to range [-1, 1]; gives NPMI measure
+    :return: array with same length as inputs containing (N)PMI measures for each input probability
+    """
+    if not isinstance(k, int) or k < 1:
+        raise ValueError('`k` must be a strictly positive integer')
+
+    if k > 1 and normalize:
+        raise ValueError('normalization is only implemented for standard PMI with `k=1`')
+
+    if n_total is not None:
+        if n_total < 1:
+            raise ValueError('`n_total` must be strictly positive')
+        x = x/n_total
+        y = y/n_total
+        xy = xy/n_total
+
+    pmi_val = logfn(xy) - logfn(x * y)
+
+    if k > 1:
+        return pmi_val - (1-k) * logfn(xy)
+    else:
+        if normalize:
+            return pmi_val / -logfn(xy)
+        else:
+            return pmi_val
+
+_NPMI = partial(_PMI, k=1, normalize=True)
+_PMI2 = partial(_PMI, k=2, normalize=False)
+_PMI3 = partial(_PMI, k=3, normalize=False)
+
+# https://github.com/WZBSocialScienceCenter/tmtoolkit/blob/master/tmtoolkit/bow/bow_stats.py
+def _doc_frequencies(dtm, min_val=1, proportions=0):
+    """
+    For each term in the vocab of `dtm` (i.e. its columns), return how often it occurs at least `min_val` times per
+    document.
+
+    :param dtm: (sparse) document-term-matrix of size NxM (N docs, M is vocab size) with raw term counts.
+    :param min_val: threshold for counting occurrences
+    :param proportions: one of :attr:`~tmtoolkit.types.Proportion`: ``NO (0)`` – return counts; ``YES (1)`` – return
+                        proportions; ``LOG (2)`` – return log of proportions
+    :return: NumPy array of size M (vocab size) indicating how often each term occurs at least `min_val` times.
+    """
+    if dtm.ndim != 2:
+        raise ValueError('`dtm` must be a 2D array/matrix')
+
+    doc_freq = np.sum(dtm >= min_val, axis=0)
+
+    if doc_freq.ndim != 1:
+        doc_freq = doc_freq.A.flatten()
+
+    if proportions == 1:
+        return doc_freq / dtm.shape[0]
+    elif proportions == 2:
+        return np.log(doc_freq) - np.log(dtm.shape[0])
+    else:
+        return doc_freq
+
+def _doc_lengths(dtm):
+    """
+    Return the length, i.e. number of terms for each document in document-term-matrix `dtm`.
+    This corresponds to the row-wise sums in `dtm`.
+
+    :param dtm: (sparse) document-term-matrix of size NxM (N docs, M is vocab size) with raw terms counts
+    :return: NumPy array of size N (number of docs) with integers indicating the number of terms per document
+    """
+    if dtm.ndim != 2:
+        raise ValueError('`dtm` must be a 2D array/matrix')
+
+    res = np.sum(dtm, axis=1)
+    if res.ndim != 1:
+        return res.A.flatten()
+    else:
+        return res
+
+def _tf_proportions(dtm, norm=False, scale=False):
+    """
+    Transform raw count document-term-matrix `dtm` to term frequency matrix with proportions, i.e. term counts
+    normalized by document length.
+
+    Note that this may introduce NaN values due to division by zero when a document is of length 0.
+
+    :param dtm: (sparse) document-term-matrix of size NxM (N docs, M is vocab size) with raw term counts
+    :return: (sparse) term frequency matrix of size NxM with proportions, i.e. term counts normalized by document length
+    """
+
+    norm_factor = 1 / np.array(_doc_lengths(dtm))[:, None]   # shape: Nx1
+
+    res = dtm * norm_factor
+    
+    if norm == True:
+        res *=100
+    else:
+        res
+    if scale == True:
+        scaled_res = res.select_dtypes(include='number').apply(scipy.stats.zscore)
+        res = pd.DataFrame(scaled_res, index=res.index, columns=res.columns)
+    else:
+        res
+    if isinstance(res, np.matrix):
+        return res.A
+    else:
+        return res
+
+def _idf(dtm, smooth_log=1, smooth_df=1):
+    """
+    Calculate inverse document frequency (idf) vector from raw count document-term-matrix `dtm` with formula
+    ``log(smooth_log + N / (smooth_df + df))``, where ``N`` is the number of documents, ``df`` is the document frequency
+    (see function :func:`~tmtoolkit.bow.bow_stats.doc_frequencies`), `smooth_log` and `smooth_df` are smoothing
+    constants. With default arguments, the formula is thus ``log(1 + N/(1+df))``.
+
+    Note that this may introduce NaN values due to division by zero when a document is of length 0.
+
+    :param dtm: (sparse) document-term-matrix of size NxM (N docs, M is vocab size) with raw term counts.
+    :param smooth_log: smoothing constant inside log()
+    :param smooth_df: smoothing constant to add to document frequency
+    :return: NumPy array of size M (vocab size) with inverse document frequency for each term in the vocab
+    """
+    if dtm.ndim != 2 or 0 in dtm.shape:
+        raise ValueError('`dtm` must be a non-empty 2D array/matrix')
+
+    n_docs = dtm.shape[0]
+    df = _doc_frequencies(dtm)
+
+    if smooth_log == smooth_df == 1:      # log1p is faster than the equivalent log(1 + x)
+        # log(1 + N/(1+df)) = log((1+df+N)/(1+df)) = log(1+df+N) - log(1+df) = log1p(df+N) - log1p(df)
+        return np.log1p(df + n_docs) - np.log1p(df)
+    else:
+        # with s = smooth_log and t = smooth_df
+        # log(s + N/(t+df)) = log((s(t+df)+N)/(t+df)) = log(s(t+df)+N) - log(t+df)
+        return np.log(smooth_log * (smooth_df + df) + n_docs) - np.log(smooth_df + df)
+
+
+def _tfidf(dtm, tf_func=_tf_proportions, idf_func=_idf, **kwargs):
+    """
+    Calculate tfidf (term frequency inverse document frequency) matrix from raw count document-term-matrix `dtm` with
+    matrix multiplication ``tf * diag(idf)``, where `tf` is the term frequency matrix ``tf_func(dtm)`` and ``idf`` is
+    the document frequency vector ``idf_func(dtm)``.
+
+    :param dtm: (sparse) document-term-matrix of size NxM (N docs, M is vocab size) with raw term counts
+    :param tf_func: function to calculate term-frequency matrix; see ``tf_*`` functions in this module
+    :param idf_func: function to calculate inverse document frequency vector; see ``tf_*`` functions in this module
+    :param kwargs: additional parameters passed to `tf_func` or `idf_func` like `K` or `smooth` (depending on which
+                   parameters these functions except)
+    :return: (sparse) tfidf matrix of size NxM
+    """
+    if dtm.ndim != 2 or 0 in dtm.shape:
+        raise ValueError('`dtm` must be a non-empty 2D array/matrix')
+
+    if idf_func is _idf:
+        idf_opts = {}
+        if 'smooth_log' in kwargs:
+            idf_opts['smooth_log'] = kwargs.pop('smooth_log')
+        if 'smooth_df' in kwargs:
+            idf_opts['smooth_df'] = kwargs.pop('smooth_df')
+
+        idf_vec = idf_func(dtm, **idf_opts)
+    elif idf_func is idf_probabilistic and 'smooth' in kwargs:
+        idf_vec = idf_func(dtm, smooth=kwargs.pop('smooth'))
+    else:
+        idf_vec = idf_func(dtm)
+
+    tf_mat = tf_func(dtm, **kwargs)
+
+    return tf_mat * idf_vec
 
 def _conlltags2tree(
     sentence, chunk_types=("NP", "PP", "VP"), root_label="S", strict=False
