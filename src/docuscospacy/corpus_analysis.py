@@ -162,8 +162,8 @@ def ngrams_by_token(tok, node_word: str, n_tokens, node_position=1, span=2, sear
     :return: a dataframe containing a token sequence the length of the span, a tag sequence the length of the span, absolute frequencies, normalized frequencies (per million tokens) and ranges
     """
     if node_position > span:
-    	node_position = span
-    	print('Setting node position to right-most position in span.')
+        node_position = span
+        print('Setting node position to right-most position in span.')
     if span < 2 or span > 5:
         raise ValueError("Span must be < " + str(2) + " and > " + str(5))
     if search_type not in ['fixed', 'starts_with', 'ends_with', 'contains']:
