@@ -3,557 +3,1790 @@ Functions for analyzing corpus data tagged with DocuScope and CLAWS7.
 .. codeauthor:: David Brown <dwb2d@andrew.cmu.edu>
 """
 
-import numpy as np
-import pandas as pd
 import re
+import math
+import unicodedata
+
+from collections import OrderedDict
+from typing import Union, List
+
+import polars as pl
+from spacy.tokens import Doc
+from spacy.language import Language
 from scipy.stats.distributions import chi2
-from tmtoolkit.corpus import doc_tokens
-from collections import Counter
 
-from . corpus_utils import (
-	_convert_totuple, _merge_tags, _merge_ds, _count_tags, _count_ds, _log_like, _log_ratio, 
-	_PMI, _PMI2, _PMI3, _index_windows_around_matches, _tf_proportions, _tfidf, _get_ngrams, 
-	_groupby_consecutive, _conlltags2tree, Tree
-)
 
-def convert_corpus(tm_corpus):
+def _str_squish(text: str) -> str:
     """
-    A simple wrapper for coverting a tmtoolkit corpus in an nltk-like dictionary of tuples.
-    
-    :param tm_corpus: A tmtoolkit corpus
-    :return: a dictionary of tuples
-    """
-    docs = doc_tokens(tm_corpus, with_attr=['token', 'whitespace', 'ent_iob', 'ent_type', 'tag'])
-    tp = _convert_totuple(docs)
-    d = {tm_corpus.doc_labels[i]: tp[i] for i in range(0,len(tp))}
-    return(d)
- 
-def normalize_dtm(dtm, scheme='prop'):
-    """
-    A function for converting a tags dtm to counts normalized by relative frequency or tf-idf
-    
-    :param dtm: A document-term-matrix with a doc_id column
-    :param scheme: One of 'prop' or 'tfidf' for normalizing counts
-    :return: a transformed dtm
-    """
-    dtm_norm = dtm.set_index('doc_id', inplace=False)
-    if scheme == 'prop':
-        dtm_norm = _tf_proportions(dtm_norm)
-    if scheme == 'tfidf':
-        dtm_norm = _tfidf(dtm_norm)
-    dtm_norm = dtm_norm.reset_index()
-    return(dtm_norm)
+    Remove extra spaces, returns, etc. from a string.
 
-def dtm_to_coo(dtm):
+    :param text: A string.
+    :return: A string.
     """
-    A function for converting a tags dtm to a COOrdinate format.
-    
-    :param dtm: A document-term-matrix with a doc_id column
-    :return: a COOrdinate format matrix, an index of document ids, and a list of variable names
-    """
-    docs = dtm['doc_id']
-    matrix_values = dtm.drop('doc_id', axis=1)
-    vocab = dtm.columns.values.tolist()[1:]
-    sparse_df = matrix_values.astype(pd.SparseDtype("float64", 0))
-    coo_sparse_matrix = sparse_df.sparse.to_coo()
-    return(coo_sparse_matrix, docs, vocab)
+    return " ".join(text.split())
 
-def frequency_table(tok, n_tokens, count_by='pos'):
+
+def _replace_curly_quotes(text: str) -> str:
+    """
+    Replaces curly quotes with straight quotes.
+
+    :param text: A string.
+    :return: A string.
+    """
+    text = text.replace(u'\u2018', "'")  # Left single quote
+    text = text.replace(u'\u2019', "'")  # Right single quote
+    text = text.replace(u'\u201C', '"')  # Left double quote
+    text = text.replace(u'\u201D', '"')  # Right double quote
+    return text
+
+
+# function for splitting long docs at approximate sentence boundaries
+def _split_docs(doc_txt: str,
+                n_chunks: float) -> List:
+    """
+    Splits documents that will exhaust spaCy's memory into smaller chunks.
+
+    :param doc_txt: A string.
+    :param n_chunks: The number of chunks for splitting.
+    :return: A list of strings.
+    """
+    sent_boundary = re.compile(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s')
+    doc_len = len(doc_txt)
+    chunk_idx = [math.ceil(i/n_chunks*doc_len) for i in range(1, n_chunks)]
+    split_idx = [sent_boundary.search(
+        doc_txt[idx:]
+        ).span()[1] + (idx-1) for idx in chunk_idx]
+    split_idx.insert(0, 0)
+    doc_chunks = [doc_txt[i:j] for i, j in zip(
+        split_idx, split_idx[1:] + [None]
+        )]
+    if len(doc_chunks) == n_chunks:
+        return doc_chunks
+    else:
+        split_idx = [re.search(
+            ' ', doc_txt[idx:]
+            ).span()[0] + idx for idx in chunk_idx]
+        split_idx.insert(0, 0)
+        doc_chunks = [doc_txt[i:j] for i, j in zip(
+            split_idx, split_idx[1:] + [None]
+            )]
+        return doc_chunks
+
+
+def _pre_process_corpus(corp: pl.DataFrame) -> pl.DataFrame:
+    """
+    Format texts to increase spaCy tagging accuracy.
+
+    :param corp: A polars DataFrame with 'doc_id' and 'text' columns.
+    :return: A polars DataFrame.
+    """
+    df = (
+        corp
+        .with_columns(
+            pl.col('text')
+            .map_elements(lambda x: _str_squish(x),
+                          return_dtype=pl.String)
+                        )
+        .with_columns(
+            pl.col('text')
+            .map_elements(lambda x: _replace_curly_quotes(x),
+                          return_dtype=pl.String)
+                        )
+        .with_columns(
+            pl.col('text')
+            .map_elements(lambda x: unicodedata.normalize('NFKD', x)
+                          .encode('ascii', errors='ignore')
+                          .decode('utf-8'), return_dtype=pl.String)
+                        )
+        .with_columns(
+            pl.col("text")
+            .str.replace_all(r"(?i)\b(it)(s)\b", "${1} ${2}")
+            )
+    )
+    return df
+
+
+def docuscope_parse(corp: pl.DataFrame,
+                    nlp_model: Language,
+                    n_process=1,
+                    batch_size=25) -> pl.DataFrame:
+    """
+    Parse a corpus using the 'en_docuso_spacy' model.
+
+    :param corp: A polars DataFrame \
+        conataining a 'doc_id' column and a 'text' column.
+    :param nlp_model: An 'en_docuso_spacy' instance.
+    :param n_process: The number of parallel processes \
+        to use during parsing.
+    :param n_process: The batch size to use during parsing.
+    :return: a polars DataFrame with, \
+        token sequencies identified by both part-of-speech tags \
+        and DocuScope tags.
+    """
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('text', pl.String)])
+    if corp.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame with 2 columns (doc_id & text).
+                         """)
+    if nlp_model.lang + '_' + nlp_model.meta['name'] != 'en_docusco_spacy':
+        raise ValueError("""
+                         Invalid spaCy model. Expected 'en_docusco_spacy'.
+                         For information and instructions see:
+                         https://huggingface.co/browndw/en_docusco_spacy
+                         """)
+
+    corp = _pre_process_corpus(corp)
+    # split long texts (> 500000 chars) into chunks
+    corp = (corp
+            .with_columns(
+                n_chunks=pl.Expr.ceil(
+                    pl.col("text").str.len_chars().truediv(500000)
+                )
+                .cast(pl.UInt32, strict=False)
+                )
+            .with_columns(
+                chunk_id=pl.int_ranges("n_chunks")
+                )
+            .with_columns(
+                pl.struct(['text', 'n_chunks'])
+                .map_elements(lambda x: _split_docs(x['text'], x['n_chunks']),
+                              return_dtype=pl.List(pl.String))
+                .alias("text")
+                )
+            .explode("text", "chunk_id")
+            .with_columns(
+                pl.col("text").str.strip_chars() + " "
+            )
+            .with_columns(
+                pl.concat_str(
+                    [
+                        pl.col("chunk_id"),
+                        pl.col("doc_id")
+                        ], separator="@",
+                        ).alias("doc_id")
+                    )
+            .drop(["n_chunks", "chunk_id"])
+            )
+    # tuple format for spaCy
+    text_tuples = []
+    for item in corp.to_dicts():
+        text_tuples.append((item['text'], {"doc_id": item['doc_id']}))
+    # add doc_id as custom attribute
+    if not Doc.has_extension("doc_id"):
+        Doc.set_extension("doc_id", default=None)
+    # create pipeline
+    doc_tuples = nlp_model.pipe(text_tuples,
+                                as_tuples=True,
+                                n_process=n_process,
+                                batch_size=batch_size)
+    # process corpus and gather into a DataFrame
+    df_list = []
+    for doc, context in doc_tuples:
+        doc._.doc_id = context["doc_id"]
+        token_list = [token.text for token in doc]
+        ws_list = [token.whitespace_ for token in doc]
+        tag_list = [token.tag_ for token in doc]
+        iob_list = [token.ent_iob_ for token in doc]
+        ent_list = [token.ent_type_ for token in doc]
+        iob_ent = list(map('-'.join, zip(iob_list, ent_list)))
+        df = pl.DataFrame({
+            "doc_id": doc._.doc_id,
+            "token": token_list,
+            "ws": ws_list,
+            "pos_tag": tag_list,
+            "ds_tag": iob_ent
+        })
+        df_list.append(df)
+    # contatenate list of DataFrames
+    df = pl.concat(df_list)
+    # add tag ids and format
+    df = (
+        df
+        .with_columns(
+            pl.col("doc_id")
+            .str.split_exact("@", 1)
+            )
+        .unnest("doc_id")
+        .rename({"field_0": "chunk_id", "field_1": "doc_id"})
+        .with_columns(
+            pl.col("chunk_id")
+            .cast(pl.UInt32, strict=False)
+            )
+        .sort(["doc_id", "chunk_id"], descending=[False, False])
+        .drop("chunk_id")
+        # assign unique ids to part-of-speech tags for grouping
+        .with_columns(
+            pl.when(
+                pl.col("pos_tag").str.contains("\\d\\d$")
+                & pl.col("pos_tag").str.contains("[^1]$")
+            )
+            .then(0)
+            .otherwise(1)
+            .cast(pl.UInt32, strict=False)
+            .alias('pos_id')
+        )
+        .with_columns(
+            pl.when(
+                pl.col("pos_id") == 1)
+            .then(pl.cum_sum("pos_id"))
+            .otherwise(None)
+            .forward_fill()
+        )
+        # ensure that ids and base tags are the same
+        # (e.g., II21, II22, etc. render as II)
+        .with_columns(
+            pl.when(
+                pl.col("pos_tag").str.contains("\\d\\d$") &
+                pl.col("pos_tag").str.contains("[^1]$")
+            )
+            .then(None)
+            .otherwise(pl.col("pos_tag").str.replace("\\d\\d$", ""))
+            .forward_fill()
+            .name.keep()
+        )
+        # assign unique ids to DocuScope tags for grouping
+        .with_columns(
+            pl.when(
+                pl.col("ds_tag").str.starts_with("B-") |
+                pl.col("ds_tag").str.starts_with("O-")
+            )
+            .then(1)
+            .otherwise(0)
+            .cast(pl.UInt32, strict=False)
+            .alias('ds_id')
+        )
+        .with_columns(
+            pl.when(
+                pl.col("ds_id") == 1
+            )
+            .then(pl.cum_sum("ds_id"))
+            .otherwise(None)
+            .forward_fill()
+        )
+        # ensure that ids and base tags are the same (e.g., B-ConfidenceHigh,
+        # I-ConfidenceHigh are rendered as ConfidenceHigh)
+        .with_columns(
+            pl.when(
+                pl.col("ds_tag").str.starts_with("B-") |
+                pl.col("ds_tag").str.starts_with("O-")
+            )
+            .then(pl.col("ds_tag").str.strip_chars_start("B-"))
+            .otherwise(None)
+            .forward_fill()
+        )
+        .with_columns(
+            pl.when(
+                pl.col("ds_tag") == "O-"
+            )
+            .then(pl.col("ds_tag").str.replace("O-", "Untagged"))
+            .otherwise(pl.col("ds_tag"))
+        )
+        .with_columns(
+            pl.when(
+                pl.col("token").str.contains("^[[:punct:]]+$")
+            )
+            .then(pl.lit("Y").alias("pos_tag"))
+            .otherwise(pl.col("pos_tag"))
+        )
+        .with_columns(
+            pl.col("token")
+            .shift(1)
+            .alias("token_1")
+        )
+        .with_columns(
+            pl.when(
+                (
+                    pl.col("token").str.contains(r"(?i)^s$")
+                    ) &
+                (
+                    pl.col("token_1").str.contains(r"(?i)^it$")
+                )
+            )
+            .then(pl.lit("GE").alias("pos_tag"))
+            .otherwise(pl.col("pos_tag"))
+        )
+        .with_columns(
+            pl.concat_str(
+                [
+                    pl.col("token"),
+                    pl.col("ws")
+                ],
+                separator="",
+            ).alias("token")
+        )
+        .drop(["token_1", "ws"])
+    )
+    return df
+
+
+def frequency_table(tokens_table: pl.DataFrame,
+                    count_by="pos") -> pl.DataFrame:
     """
     Generate a count of token frequencies.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
-    :param n_tokens: A count of total tokens against which to normalize
-    :param count_by: One of 'pos' or 'ds' for aggregating tokens
-    :return: a dataframe of absolute frequencies, normalized frequencies (per million tokens) and ranges
-    """
-    tok = list(tok.values())
-    if count_by == 'pos':
-        tc = _merge_tags(tok)
-    if count_by == 'ds':
-        tc = _merge_ds(tok)
-    phrase_range = []
-    for i in range(0,len(tc)):
-        phrase_range.append(list(set(tc[i])))
-    phrase_range = [x for xs in phrase_range for x in xs]
-    phrase_range = Counter(phrase_range)
-    phrase_range = sorted(phrase_range.items(), key=lambda pair: pair[0], reverse=False)
-    phrase_list = [x for xs in tc for x in xs]
-    phrase_list = Counter(phrase_list)
-    phrase_list = sorted(phrase_list.items(), key=lambda pair: pair[0], reverse=False)
-    phrases = [x[0] for x in phrase_list]
-    tags = [x[1] for x in phrases]
-    if count_by == 'ds':
-        tags = np.array([re.sub(r'([a-z])([A-Z])', '\\1 \\2', x) for x in tags])
-    else:
-        tags = np.array(tags)
-    phrases = np.array([x[0] for x in phrases])
-    phrase_freq = np.array([x[1] for x in phrase_list])
-    phrase_prop = np.array(phrase_freq)/n_tokens*1000000
-    phrase_range = np.array([x[1] for x in phrase_range])/len(tok)*100
-    phrase_range = phrase_range.round(decimals=2)
-    phrase_counts = list(zip(phrases.tolist(), tags.tolist(), phrase_freq.tolist(), phrase_prop.tolist(), phrase_range.tolist()))
-    phrase_counts = pd.DataFrame(phrase_counts, columns=['Token', 'Tag', 'AF', 'RF', 'Range'])
-    phrase_counts.sort_values(by=['AF', 'Token'], ascending=[False, True], inplace=True)
-    phrase_counts.reset_index(drop=True, inplace=True)
-    return(phrase_counts)
 
-def tags_table(tok, n_tokens, count_by='pos'):
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
+    :param count_by: One of 'pos', 'ds', or 'both' for aggregating tokens
+    :return: A polars DataFrame of token counts
+    """
+    count_types = ['pos', 'ds', 'both']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
+
+    def summarize_counts(df):
+        df = (
+            df
+            .pivot(
+                index="Token", on="doc_id",
+                values="len", aggregate_function="sum"
+                )
+            .with_columns(
+                pl.all().exclude("Token").cast(pl.UInt32, strict=True)
+            )
+            # calculate range
+            .with_columns(
+                pl.sum_horizontal(pl.selectors.numeric().is_not_null())
+                .alias("Range")
+            )
+            .with_columns(
+                pl.selectors.numeric().fill_null(strategy="zero")
+            )
+            # normalize over total documents in corpus
+            .with_columns(
+                    pl.col("Range").truediv(
+                        pl.sum_horizontal(
+                            pl.selectors.numeric()
+                            .exclude("Range")
+                            .is_not_null()
+                            )
+                        ).mul(100)
+            )
+            # calculate absolute frequency
+            .with_columns(
+                pl.sum_horizontal(pl.selectors.numeric().exclude("Range"))
+                .alias("AF")
+            )
+            .sort("AF", descending=True)
+            .select(["Token", "AF", "Range"])
+            # calculate relative frequency
+            .with_columns(
+                pl.col("AF").truediv(pl.sum("AF")).mul(1000000)
+                .alias("RF")
+            )
+            # format data
+            .unnest("Token")
+            .select(["Token", "Tag", "AF", "RF", "Range"])
+            )
+        return (df)
+
+    # format tokens and sum by doc_id
+    df_pos = (
+        tokens_table
+        .group_by(["doc_id", "pos_id", "pos_tag"], maintain_order=True)
+        .agg(
+            pl.col("token").str.concat("")
+        )
+        .with_columns(
+            pl.col("token").str.to_lowercase().str.strip_chars())
+        .filter(
+            pl.col("pos_tag") != "Y"
+        )
+        .rename({"pos_tag": "Tag"})
+        .rename({"token": "Token"})
+        .group_by(["doc_id", "Token", "Tag"]).len()
+        .with_columns(
+            pl.struct(["Token", "Tag"])
+        )
+        .select(pl.exclude("Tag"))
+        )
+
+    df_pos = summarize_counts(df_pos).sort(
+        ["AF", "Token"], descending=[True, False]
+        )
+
+    if count_by == "pos":
+        return (df_pos)
+    else:
+        df_ds = (
+            tokens_table
+            .group_by(["doc_id", "ds_id", "ds_tag"], maintain_order=True)
+            .agg(
+                pl.col("token").str.concat("")
+            )
+            .with_columns(
+                pl.col("token").str.to_lowercase().str.strip_chars())
+            .filter(
+                ~(pl.col("token").str.contains("^[[[:punct:]] ]+$") &
+                  pl.col("ds_tag").str.contains("Untagged"))
+            )
+            .rename({"ds_tag": "Tag"})
+            .rename({"token": "Token"})
+            .group_by(["doc_id", "Token", "Tag"]).len()
+            .with_columns(
+                pl.struct(["Token", "Tag"])
+            )
+            .select(pl.exclude("Tag"))
+            )
+
+        df_ds = summarize_counts(df_ds).sort(["AF", "Token"],
+                                             descending=[True, False])
+    if count_by == "ds":
+        return (df_ds)
+    else:
+        return (df_pos, df_ds)
+
+
+def tags_table(tokens_table: pl.DataFrame,
+               count_by='pos') -> pl.DataFrame:
     """
     Generate a count of tag frequencies.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
-    :param n_tokens: A count of total tokens against which to normalize
-    :param count_by: One of 'pos' or 'ds' for aggregating tokens
-    :return: a dataframe of absolute frequencies, normalized frequencies (per million tokens) and ranges
-    """
-    tok = list(tok.values())
-    if count_by == 'pos':
-        tc = _count_tags(tok, n_tokens)
-    if count_by == 'ds':
-        tc = _count_ds(tok, n_tokens)
-    tag_counts = pd.DataFrame(tc, columns=['Tag', 'AF', 'RF', 'Range'])
-    tag_counts.sort_values(by=['AF', 'Tag'], ascending=[False, True], inplace=True)
-    tag_counts.reset_index(drop=True, inplace=True)
-    return(tag_counts)
 
-def tags_dtm(tok, count_by='pos'):
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
+    :param count_by: One of 'pos', 'ds' or 'both' for aggregating tokens
+    :return: a polars DataFrame of absolute frequencies, \
+        normalized frequencies(per million tokens) and ranges
+    """
+    count_types = ['pos', 'ds', 'both']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
+
+    def summarize_counts(df):
+        df = (
+            df
+            .pivot(index="Tag",
+                   on="doc_id",
+                   values="len",
+                   aggregate_function="sum")
+            .with_columns(
+                pl.all().exclude("Tag").cast(pl.UInt32, strict=True)
+            )
+            # calculate range
+            .with_columns(
+                Range=pl.sum_horizontal(pl.selectors.numeric().is_not_null())
+            )
+            .with_columns(
+                pl.selectors.numeric().fill_null(strategy="zero")
+            )
+            # normalize over total documents in corpus
+            .with_columns(
+                    pl.col("Range").truediv(
+                        pl.sum_horizontal(
+                            pl.selectors.numeric()
+                            .exclude("Range").is_not_null()
+                            )
+                        ).mul(100)
+            )
+            # calculate absolute frequency
+            .with_columns(
+                pl.sum_horizontal(pl.selectors.numeric().exclude("Range"))
+                .alias("AF")
+            )
+            .sort("AF", descending=True)
+            .select(["Tag", "AF", "Range"])
+            # calculate relative frequency
+            .with_columns(
+                pl.col("AF").truediv(pl.sum("AF")).mul(100)
+                .alias("RF")
+            )
+            .select(["Tag", "AF", "RF", "Range"])
+            )
+        return (df)
+
+    # format tokens and sum by doc_id
+    df_pos = (
+        tokens_table
+        .filter(pl.col("pos_tag") != "Y")
+        .group_by(["doc_id", "pos_id", "pos_tag"], maintain_order=True)
+        .first()
+        .group_by(["doc_id", "pos_tag"]).len()
+        .rename({"pos_tag": "Tag"})
+        )
+
+    df_pos = summarize_counts(df_pos).sort(["AF", "Tag"],
+                                           descending=[True, False])
+
+    if count_by == "pos":
+        return df_pos
+    else:
+        df_ds = (
+            tokens_table
+            .filter(~(pl.col("token").str.contains("^[[[:punct:]] ]+$") &
+                      pl.col("ds_tag").str.contains("Untagged")))
+            .group_by(["doc_id", "ds_id", "ds_tag"], maintain_order=True)
+            .first()
+            .group_by(["doc_id", "ds_tag"]).len()
+            .rename({"ds_tag": "Tag"})
+            )
+
+        df_ds = summarize_counts(df_ds).sort(["AF", "Tag"],
+                                             descending=[True, False])
+    if count_by == "ds":
+        return df_ds
+    else:
+        return df_pos, df_ds
+
+
+def tags_dtm(tokens_table: pl.DataFrame,
+             count_by='pos') -> pl.DataFrame:
     """
     Generate a document-term matrix of raw tag counts.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
-    :param count_by: One of 'pos' or 'ds' for aggregating tokens
-    :return: a dataframe of absolute tag frequencies for each document
-    """
-    doc_id = list(tok.keys())
-    tok = list(tok.values())
-    if count_by == 'pos':
-        tc = _merge_tags(tok)
-    if count_by == 'ds':
-        tc = _merge_ds(tok)
-    remove_starttags = ('Y', 'FU')
-    tag_list = []
-    for i in range(0,len(tc)):
-        tags = [x[1] for x in tc[i]]
-        if count_by == 'pos':
-            tags = [x for x in tags if not x.startswith(remove_starttags)]
-        tag_list.append(tags)
-    tag_counts = []
-    for i in range(0,len(tag_list)):
-        counts = Counter(tag_list[i])
-        tag_counts.append(counts)
-    df = pd.DataFrame.from_records(tag_counts)
-    df = df.fillna(0)
-    df = df.reindex(sorted(df.columns), axis=1)
-    df.insert(0, 'doc_id', doc_id)
-    return(df)
 
-def ngrams_by_token(tok, node_word: str, n_tokens, node_position=1, span=2, search_type='fixed', count_by='pos'):
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
+    :param count_by: One of 'pos', 'ds' or 'both' for aggregating tokens
+    :return: a polars DataFrame of absolute tag frequencies for each document
+    """
+    count_types = ['pos', 'ds', 'both']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
+
+    df_pos = (
+        tokens_table
+        .filter(
+            pl.col("pos_tag") != "Y"
+            )
+        .group_by(
+            ["doc_id", "pos_id", "pos_tag"], maintain_order=True
+            )
+        .first()
+        .group_by(
+            ["doc_id", "pos_tag"]
+            ).len()
+        .rename(
+            {"pos_tag": "tag"}
+            )
+        .with_columns(
+            pl.col("len").sum().over('tag').alias('total')
+            )
+        .sort(
+            ["total", "doc_id"], descending=[True, False]
+            )
+        .pivot(
+            index="doc_id", on="tag", values="len", aggregate_function="sum"
+            )
+        .fill_null(
+            strategy="zero"
+            )
+        )
+
+    if count_by == "pos":
+        return df_pos
+
+    df_ds = (
+        tokens_table
+        .filter(
+            ~(pl.col("token").str.contains("^[[[:punct:]] ]+$") &
+              pl.col("ds_tag").str.contains("Untagged"))
+              )
+        .group_by(
+            ["doc_id", "ds_id", "ds_tag"], maintain_order=True
+            )
+        .first()
+        .group_by(
+            ["doc_id", "ds_tag"]
+            ).len()
+        .rename(
+            {"ds_tag": "tag"}
+            )
+        .with_columns(
+            pl.col("len").sum().over('tag').alias('total')
+            )
+        .sort(
+            ["total", "doc_id"], descending=[True, False]
+            )
+        .pivot(
+            index="doc_id", on="tag", values="len", aggregate_function="sum"
+            )
+        .fill_null
+        (strategy="zero"
+         )
+    )
+
+    if count_by == "ds":
+        return df_ds
+    else:
+        return df_pos, df_ds
+
+
+def ngrams(tokens_table: pl.DataFrame,
+           span=2,
+           min_frequency=10,
+           count_by='pos'):
+    """
+    Generate a table of ngram frequencies of a specificd length.
+
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
+    :param span: An interger between 2 and 5 \
+        representing the size of the ngrams
+    :min_frequency: The minimum count of the ngrams returned
+    :param count_by: One of 'pos' or 'ds' for aggregating tokens
+    :return: a polars DataFrame containing \
+        a token sequence the length of the span, \
+            a tag sequence the length of the span, absolute frequencies, \
+                normalized frequencies (per million tokens) and ranges
+    """
+    count_types = ['pos', 'ds']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
+    if span < 2 or span > 5:
+        raise ValueError("Span must be < " + str(2) + " and > " + str(5))
+
+    if count_by == 'pos':
+        grouping_tag = "pos_tag"
+        grouping_id = "pos_id"
+        expr_filter = pl.col("pos_tag") != "Y"
+    else:
+        grouping_tag = "ds_tag"
+        grouping_id = "ds_id"
+        expr_filter = ~(pl.col("token").str.contains("^[[[:punct:]] ]+$") &
+                        pl.col("ds_tag").str.contains("Untagged"))
+
+    look_around_token = [
+        pl.col("token")
+        .shift(-i).alias(f"tok_lag_{i}") for i in range(span)
+        ]
+    look_around_tag = [
+        pl.col(grouping_tag)
+        .shift(-i).alias(f"tag_lag_{i}") for i in range(span)
+        ]
+
+    rename_tokens = [
+            pl.col('ngram').struct.rename_fields(
+                [f'Token_{i + 1}' for i in range(span)]
+                )]
+    rename_tags = [
+            pl.col('tags').struct.rename_fields(
+                [f'Tag_{i + 1}' for i in range(span)]
+                )]
+
+    ngram_df = (
+        tokens_table
+        .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
+        .agg(
+            pl.col("token").str.concat("")
+            )
+        .filter(expr_filter)
+        .with_columns(pl.col("token").len().alias("total"))
+        .with_columns(
+            pl.col("token").str.to_lowercase().str.strip_chars())
+        .with_columns(
+            look_around_token + look_around_tag
+            )
+        .group_by("doc_id", "total")
+        .agg(
+            pl.concat_list([f"tok_lag_{i}" for i in range(span)]
+                           ).alias("ngram"),
+            pl.concat_list([f"tag_lag_{i}" for i in range(span)]
+                           ).alias("tags")
+            )
+        .explode(["ngram", "tags"])
+        .with_columns(
+            pl.col(["ngram", "tags"]).list.to_struct()
+            )
+        .group_by(
+            ["doc_id", "total", "ngram", "tags"]
+            ).len().sort("len", descending=True)
+        .with_columns(
+            pl.struct(["ngram", "tags"])
+            )
+        .select(pl.exclude("tags"))
+        .pivot(index=["ngram", "total"],
+               on="doc_id", values="len",
+               aggregate_function="sum")
+        .with_columns(
+            pl.all().exclude("ngram").cast(pl.UInt32, strict=True)
+            )
+        # calculate range
+        .with_columns(
+            pl.sum_horizontal(
+                pl.selectors.numeric().exclude("total").is_not_null()
+                ).alias("Range")
+            )
+        .with_columns(
+            pl.selectors.numeric().fill_null(strategy="zero")
+            )
+        # normalize over total documents in corpus
+        .with_columns(
+                pl.col("Range").truediv(
+                    pl.sum_horizontal(
+                        pl.selectors.numeric().exclude(
+                            ["Range", "total"]).is_not_null()
+                        )
+                    ).mul(100)
+            )
+        # calculate absolute frequency
+        .with_columns(
+            pl.sum_horizontal(
+                pl.selectors.numeric().exclude(["Range", "total"])
+                ).alias("AF")
+            )
+        .sort("AF", descending=True)
+        # calculate relative frequency
+        .with_columns(
+            pl.col("AF").truediv(pl.col("total")).mul(1000000)
+            .alias("RF")
+            )
+        .select(["ngram", "AF", "RF", "Range"])
+        .unnest("ngram")
+        .with_columns(
+            rename_tokens + rename_tags
+            )
+        .unnest(["ngram", "tags"])
+        .sort(["AF", "Token_1", "Token_2"], descending=[True, False, False])
+        .filter(
+                pl.col('RF') >= min_frequency
+            )
+        )
+
+    return ngram_df
+
+
+def clusters_by_token(tokens_table: pl.DataFrame,
+                      node_word: str,
+                      node_position=1,
+                      span=2,
+                      search_type="fixed",
+                      count_by='pos'):
     """
     Generate a table of ngram frequencies searching by token.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
-    :param node_word: A token to include in the n-grams
-    :param n_tokens: A count of total tokens against which to normalize
-    :param node_position: The placement of the node word in the n-grams (1, for example, would be on the left)
-    :param span: An interger between 2 and 5 representing the size of the ngrams
-    :param search_type: One of 'fixed', 'starts_with', 'ends_with', or 'contains'
+
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
+    :param node_word: A token to include in the cluster
+    :param node_position: The placement of the node word in the cluster \
+        (1, for example, would be on the left)
+    :param span: An interger between 2 and 5 \
+        representing the size of the cluster
+    :param search_type: One of 'fixed', 'starts_with', \
+        'ends_with', or 'contains'
     :param count_by: One of 'pos' or 'ds' for aggregating tokens
-    :return: a dataframe containing a token sequence the length of the span, a tag sequence the length of the span, absolute frequencies, normalized frequencies (per million tokens) and ranges
+    :return: a polars DataFrame containing \
+        a token sequence the length of the span, \
+            a tag sequence the length of the span, absolute frequencies, \
+                normalized frequencies (per million tokens) and ranges
     """
+    count_types = ['pos', 'ds']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
+
     if node_position > span:
         node_position = span
         print('Setting node position to right-most position in span.')
     if span < 2 or span > 5:
         raise ValueError("Span must be < " + str(2) + " and > " + str(5))
     if search_type not in ['fixed', 'starts_with', 'ends_with', 'contains']:
-    	raise ValueError('Search type must be on of fixed, starts_with, ends_with, or contains.')
-    span_l = node_position - 1
-    span_r = span - span_l
-    tok = list(tok.values())
-    if count_by == 'pos':
-        tc = _merge_tags(tok)
-    if count_by == 'ds':
-        tc = _merge_ds(tok)
-    ngram_list = []
-    for i in range(0,len(tc)):
-        tp = tc[i]
-        tpf = [t[0] for t in tp]
-        # create a boolean vector for node word
-        if search_type == "fixed":
-            v = [t == node_word.lower() for t in tpf]
-        elif search_type == "starts_with":
-            v = [t.startswith(node_word.lower()) for t in tpf]
-        elif search_type == "ends_with":
-            v = [t.endswith(node_word.lower()) for t in tpf]
-        elif search_type == "contains":
-            v = [node_word.lower() in t.lower() for t in tpf]
-        if sum(v) > 0:
-            idx = list(_index_windows_around_matches(np.array(v), left=span_l, right=span_r, flatten=False))
-            start_idx = [min(x) for x in idx]
-            end_idx = [max(x) for x in idx]
-            in_span = []
-            for i in range(len(idx)):
-                span_tokens = [t for t in tp[start_idx[i]:end_idx[i]]]
-                in_span.append(span_tokens)
-                merged_tokens = []
-                for i in range(0,len(in_span)):
-                    if len(in_span[i]) == span:
-                        merged_tokens.append('_token_'.join(['_tag_'.join(x) for x in in_span[i]]))
-            ngram_list.append(merged_tokens)
-    # calculate ranges
-    ngram_range = []
-    for i in range(0,len(ngram_list)):
-        ngram_range.append(list(set(ngram_list[i])))
-    ngram_range = [x for xs in ngram_range for x in xs]
-    ngram_range = Counter(ngram_range)
-    ngram_range = sorted(ngram_range.items(), key=lambda pair: pair[0], reverse=False)
-    # calculate counts
-    ngram_count = [x for xs in ngram_list for x in xs]
-    ngram_count = Counter(ngram_count)
-    ngram_count = sorted(ngram_count.items(), key=lambda pair: pair[0], reverse=False)
-    # build table
-    ngrams = [x[0] for x in ngram_count]
-    ngrams = [x.split('_token_') for x in ngrams]
-    ngrams = [sum([x[i].split('_tag_') for i in range(span)], []) for x in ngrams]
-    order = list(range(0, span*2, 2)) + list(range(1, span*2 + 1, 2))
-    for l in reversed(range(len(ngrams))):
-        ngrams[l] = [ngrams[l][j] for j in order]
-    ngrams = np.array(ngrams)
-    ngram_freq = np.array([x[1] for x in ngram_count])
-    ngram_prop = np.array(ngram_freq)/n_tokens*1000000
-    ngram_range = np.array([x[1] for x in ngram_range])/len(tok)*100
-    counts = list(zip(ngrams.tolist(), ngram_freq.tolist(), ngram_prop.tolist(), ngram_range.tolist()))
-    ngram_counts = list()
-    for x in counts:
-        tt = tuple()
-        for y in x:
-            if not type(y) == list:
-                tt += (y,)
-            else:
-                tt += (*y,)
-        ngram_counts.append(tt)
-    df = pd.DataFrame(ngram_counts, columns=['Token' + str(i) for i in range (1, span+1)] + ['Tag' + str(i) for i in range (1, span+1)] + ['AF', 'RF', 'Range'])
-    df.sort_values(by=['AF', 'Token1'], ascending=[False, True], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    if df.empty:
-    	print('Your n-gram search did not return any results.')
-    else:
-    	return(df)
+        raise ValueError("""
+                         Search type must be on of 'fixed',
+                         'starts_with', 'ends_with', or 'contains'.
+                         """)
 
-def ngrams_by_tag(tok, tag: str, n_tokens, tag_position = 1, span = 2, search_type='fixed', count_by='pos'):
+    if count_by == 'pos':
+        grouping_tag = "pos_tag"
+        grouping_id = "pos_id"
+        expr_filter = pl.col("pos_tag") != "Y"
+    else:
+        grouping_tag = "ds_tag"
+        grouping_id = "ds_id"
+        expr_filter = ~(
+            pl.col("token").str.contains("^[[[:punct:]] ]+$") &
+            pl.col("ds_tag").str.contains("Untagged")
+            )
+
+    if search_type == "fixed":
+        expr = pl.col("token") == node_word.lower()
+    elif search_type == "starts_with":
+        expr = pl.col("token").str.starts_with(node_word.lower())
+    elif search_type == "ends_with":
+        expr = pl.col("token").str.ends_with(node_word.lower())
+    elif search_type == "contains":
+        expr = pl.col("token").str.contains(node_word.lower())
+
+    preceding = node_position - 1
+    following = span - node_position
+
+    look_around_token = [
+        pl.col("token")
+        .shift(-i).alias(f"tok_lag_{i}") for i in range(
+            -preceding, following + 1
+            )]
+    look_around_tag = [
+        pl.col(grouping_tag)
+        .shift(-i).alias(f"tag_lag_{i}") for i in range(
+            -preceding, following + 1
+            )]
+
+    rename_tokens = [
+            pl.col('ngram')
+            .struct.rename_fields([f'Token_{i + 1}' for i in range(span)])
+            ]
+    rename_tags = [
+            pl.col('tags')
+            .struct.rename_fields([f'Tag_{i + 1}' for i in range(span)])
+            ]
+
+    ngram_df = (
+        tokens_table
+        .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
+        .agg(
+            pl.col("token").str.concat("")
+            )
+        .filter(expr_filter)
+        .with_columns(pl.col("token").len().alias("total"))
+        .with_columns(
+            pl.col("token").str.to_lowercase().str.strip_chars())
+        .with_columns(
+            look_around_token + look_around_tag
+            )
+        .filter(expr)
+        .group_by("doc_id", "total")
+        .agg(
+            pl.concat_list(
+                [f"tok_lag_{i}" for i in range(-preceding, following + 1)]
+                ).alias("ngram"),
+            pl.concat_list(
+                [f"tag_lag_{i}" for i in range(-preceding, following + 1)]
+                ).alias("tags")
+            )
+        .explode(["ngram", "tags"])
+    )
+
+    if ngram_df.height == 0:
+        return ngram_df
+
+    else:
+        ngram_df = (
+            ngram_df
+            .with_columns(
+                pl.col(["ngram", "tags"]).list.to_struct()
+                )
+            .group_by(["doc_id", "total", "ngram", "tags"])
+            .len().sort("len", descending=True)
+            .with_columns(
+                pl.struct(["ngram", "tags"])
+                    )
+            .select(pl.exclude("tags"))
+            .pivot(index=["ngram", "total"],
+                   on="doc_id",
+                   values="len",
+                   aggregate_function="sum")
+            .with_columns(
+                pl.all().exclude("ngram").cast(pl.UInt32, strict=True)
+                )
+            # calculate range
+            .with_columns(
+                pl.sum_horizontal(
+                    pl.selectors.numeric().exclude("total").is_not_null()
+                    )
+                .alias("Range")
+                )
+            .with_columns(
+                pl.selectors.numeric().fill_null(strategy="zero")
+                )
+            # normalize over total documents in corpus
+            .with_columns(
+                pl.col("Range").truediv(
+                    pl.sum_horizontal(
+                        pl.selectors.numeric()
+                        .exclude(["Range", "total"]).is_not_null()
+                        )
+                    ).mul(100)
+                )
+            # calculate absolute frequency
+            .with_columns(
+                pl.sum_horizontal(pl.selectors.numeric()
+                                  .exclude(["Range", "total"]))
+                .alias("AF")
+                )
+            .sort("AF", descending=True)
+            # calculate relative frequency
+            .with_columns(
+                pl.col("AF").truediv(pl.col("total")).mul(1000000)
+                .alias("RF")
+                )
+            .select(["ngram", "AF", "RF", "Range"])
+            .unnest("ngram")
+            .with_columns(
+                rename_tokens + rename_tags
+                )
+            .unnest(["ngram", "tags"])
+        )
+        return ngram_df
+
+
+def clusters_by_tag(tokens_table: pl.DataFrame,
+                    tag: str,
+                    tag_position=1,
+                    span=2,
+                    count_by='pos') -> pl.DataFrame:
     """
     Generate a table of ngram frequencies searching by tag.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
+
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
     :param tag: A tag to include in the n-grams
-    :param n_tokens: A count of total tokens against which to normalize
-    :param tag_position: The placement of tag in the n-grams (1, for example, would be on the left)
-    :param span: An interger between 2 and 5 representing the size of the ngrams
-    :param search_type: One of 'fixed', 'starts_with', 'ends_with', or 'contains'
+    :param tag_position: The placement of tag in the n-grams \
+        (1, for example, would be on the left)
+    :param span: An interger between 2 and 5 \
+        representing the size of the ngrams
     :param count_by: One of 'pos' or 'ds' for aggregating tokens
-    :return: a dataframe containing a token sequence the length of the span, a tag sequence the length of the span, absolute frequencies, normalized frequencies (per million tokens) and ranges
+    :return: a polars DataFrame containing \
+        a token sequence the length of the span, \
+            a tag sequence the length of the span, absolute frequencies, \
+                normalized frequencies (per million tokens) and ranges
     """
+    count_types = ['pos', 'ds']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
     if tag_position > span:
-    	tag_position = span
-    	print('Setting node position to right-most position in span.')
+        tag_position = span
+        print('Setting node position to right-most position in span.')
     if span < 2 or span > 5:
         raise ValueError("Span must be < " + str(2) + " and > " + str(5))
-    span_l = tag_position - 1
-    span_r = span - span_l
-    tok = list(tok.values())
-    if count_by == 'pos':
-        tc = _merge_tags(tok)
-    if count_by == 'ds':
-        tc = _merge_ds(tok)
-    ngram_list = []
-    for i in range(0,len(tc)):
-        tp = tc[i]
-        tpf = [t[1] for t in tp]
-        # create a boolean vector for tag
-        # create a boolean vector for node word
-        if search_type == "fixed":
-            v = [t.lower() == tag.lower() for t in tpf]
-        elif search_type == "starts_with":
-            v = [t.lower().startswith(tag.lower()) for t in tpf]
-        elif search_type == "ends_with":
-            v = [t.lower().endswith(tag.lower()) for t in tpf]
-        elif search_type == "contains":
-            v = [tag.lower() in t.lower() for t in tpf]
-        if sum(v) > 0:
-            idx = list(_index_windows_around_matches(np.array(v), left=span_l, right=span_r, flatten=False))
-            start_idx = [min(x) for x in idx]
-            end_idx = [max(x) for x in idx]
-            in_span = []
-            for i in range(len(idx)):
-                span_tokens = [t for t in tp[start_idx[i]:end_idx[i]]]
-                in_span.append(span_tokens)
-                merged_tokens = []
-                for i in range(0,len(in_span)):
-                    if len(in_span[i]) == span:
-                        merged_tokens.append('_token_'.join(['_tag_'.join(x) for x in in_span[i]]))
-            ngram_list.append(merged_tokens)
-    # calculate ranges
-    ngram_range = []
-    for i in range(0,len(ngram_list)):
-        ngram_range.append(list(set(ngram_list[i])))
-    ngram_range = [x for xs in ngram_range for x in xs]
-    ngram_range = Counter(ngram_range)
-    ngram_range = sorted(ngram_range.items(), key=lambda pair: pair[0], reverse=False)
-    # calculate counts
-    ngram_count = [x for xs in ngram_list for x in xs]
-    ngram_count = Counter(ngram_count)
-    ngram_count = sorted(ngram_count.items(), key=lambda pair: pair[0], reverse=False)
-    # build table
-    ngrams = [x[0] for x in ngram_count]
-    ngrams = [x.split('_token_') for x in ngrams]
-    ngrams = [sum([x[i].split('_tag_') for i in range(span)], []) for x in ngrams]
-    order = list(range(0, span*2, 2)) + list(range(1, span*2 + 1, 2))
-    for l in reversed(range(len(ngrams))):
-        ngrams[l] = [ngrams[l][j] for j in order]
-    ngrams = np.array(ngrams)
-    ngram_freq = np.array([x[1] for x in ngram_count])
-    ngram_prop = np.array(ngram_freq)/n_tokens*1000000
-    ngram_range = np.array([x[1] for x in ngram_range])/len(tok)*100
-    counts = list(zip(ngrams.tolist(), ngram_freq.tolist(), ngram_prop.tolist(), ngram_range.tolist()))
-    ngram_counts = list()
-    for x in counts:
-        tt = tuple()
-        for y in x:
-            if not type(y) == list:
-                tt += (y,)
-            else:
-                tt += (*y,)
-        ngram_counts.append(tt)
-    df = pd.DataFrame(ngram_counts, columns=['Token' + str(i) for i in range (1, span+1)] + ['Tag' + str(i) for i in range (1, span+1)] + ['AF', 'RF', 'Range'])
-    df.sort_values(by=['AF', 'Token1'], ascending=[False, True], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    if df.empty:
-    	print('Your n-gram search did not return any results.')
-    else:
-    	return(df)
 
-def coll_table(tok, node_word, l_span=4, r_span=4, statistic='pmi', count_by='pos', node_tag=None, tag_ignore=False):
-    """
-    Generate a table of collocations by association measure.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
-    :param node_word: The token around with collocations are measured
-    :param l_span: An integer between 0 and 9 representing the span to the left of the node word
-    :param r_span: An integer between 0 and 9 representing the span to the right of the node word
-    :param statistic: The association measure to be calculated. One of: 'pmi', 'npmi', 'pmi2', 'pmi3'
-    :param count_by: One of 'pos' or 'ds' for aggregating tokens
-    :param node_tag: A value specifying the tag of the node word. If the node_word were 'can', a node_tag 'V' would search for can as a verb.
-    :param tag_ignore: A boolean value indicating whether or not tags should be ignored during analysis.
-    :return: a dataframe containing collocate tokens, tags, the absolute frequency the collocate in the corpus, the absolute frequency of the collocate within the designated span, and the association measure.
-    """
-    tok = list(tok.values())
-    stats = {'pmi', 'npmi', 'pmi2', 'pmi3'}
-    if statistic not in stats:
-        raise ValueError("results: statistic must be one of %r." % stats)
-    if l_span < 0 or l_span > 9:
-        raise ValueError("Span must be < " + str(0) + " and > " + str(9))
-    if r_span < 0 or r_span > 9:
-        raise ValueError("Span must be < " + str(0) + " and > " + str(9))
-    if bool(tag_ignore) == True:
-        node_tag = None
     if count_by == 'pos':
-        tc = _merge_tags(tok)
-    if count_by == 'ds':
-        tc = _merge_ds(tok)
-    in_span = []
-    for i in range(0,len(tc)):
-        tpf = tc[i]
-        # create a boolean vector for node word
-        if node_tag is None:
-            v = [t[0] == node_word for t in tpf]
-        else:
-            v = [t[0] == node_word and t[1].startswith(node_tag) for t in tpf]
-        if sum(v) > 0:
-            # get indices within window around the node
-            idx = list(_index_windows_around_matches(np.array(v), left=l_span, right=r_span, flatten=False))
-            node_idx = [i for i, x in enumerate(v) if x == True]
-            # remove node word from collocates
-            coll_idx = [np.setdiff1d(idx[i], node_idx[i]) for i in range(len(idx))]
-            coll_idx = [x for xs in coll_idx for x in xs]
-            coll = [tpf[i] for i in coll_idx]
-        else:
-            coll = []
-        in_span.append(coll)
-    in_span = [x for xs in in_span for x in xs]
-    tc = [x for xs in tc for x in xs]
-    df_total = pd.DataFrame(tc, columns=['Token', 'Tag'])
-    if bool(tag_ignore) == True:
-        df_total = df_total.drop(columns=['Tag'])
-    if bool(tag_ignore) == True:
-        df_total = df_total.groupby(['Token']).value_counts().to_frame('Freq Total').reset_index()
+        grouping_tag = "pos_tag"
+        grouping_id = "pos_id"
+        expr = pl.col("pos_tag") == tag
+        expr_filter = pl.col("pos_tag") != "Y"
     else:
-        df_total = df_total.groupby(['Token','Tag']).value_counts().to_frame('Freq Total').reset_index()
-    df_span = pd.DataFrame(in_span, columns=['Token', 'Tag'])
-    if bool(tag_ignore) == True:
-        df_span = df_span.drop(columns=['Tag'])
-    if bool(tag_ignore) == True:
-        df_span = df_span.groupby(['Token']).value_counts().to_frame('Freq Span').reset_index()
-    else:
-        df_span = df_span.groupby(['Token','Tag']).value_counts().to_frame('Freq Span').reset_index()
-    if node_tag is None:
-        node_freq = sum(df_total[df_total['Token'] == node_word]['Freq Total'])
-    else:
-        node_freq = sum(df_total[(df_total['Token'] == node_word) & (df_total['Tag'].str.startswith(node_tag, na=False))]['Freq Total'])
-    if bool(tag_ignore) == True:
-        df = pd.merge(df_span, df_total, how='inner', on=['Token'])
-    else:
-        df = pd.merge(df_span, df_total, how='inner', on=['Token', 'Tag'])
-    if statistic=='pmi':
-        df['MI'] = _PMI(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=False)
-    if statistic=='npmi':
-        df['MI'] = _PMI(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']), normalize=True)
-    if statistic=='pmi2':
-        df['MI'] = _PMI2(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
-    if statistic=='pmi3':
-        df['MI'] = _PMI3(node_freq, df['Freq Total'], df['Freq Span'], sum(df_total['Freq Total']))
-    df.sort_values(by=['MI', 'Token'], ascending=[False, True], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    return(df)
+        grouping_tag = "ds_tag"
+        grouping_id = "ds_id"
+        expr = pl.col("ds_tag") == tag
+        expr_filter = ~(pl.col("token").str.contains("^[[[:punct:]] ]+$") &
+                        pl.col("ds_tag").str.contains("Untagged"))
 
-def kwic_center_node(tok, node_word, ignore_case=True, search_type='fixed'):
+    preceding = tag_position - 1
+    following = span - tag_position
+
+    look_around_token = [
+        pl.col("token")
+        .shift(-i).alias(f"tok_lag_{i}") for i in range(
+            -preceding, following + 1
+            )]
+    look_around_tag = [
+        pl.col(grouping_tag)
+        .shift(-i).alias(f"tag_lag_{i}") for i in range(
+            -preceding, following + 1
+            )]
+
+    rename_tokens = [
+            pl.col('ngram').struct
+            .rename_fields([f'Token_{i + 1}' for i in range(span)])
+            ]
+    rename_tags = [
+            pl.col('tags').struct
+            .rename_fields([f'Tag_{i + 1}' for i in range(span)])
+            ]
+
+    ngram_df = (
+        tokens_table
+        .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
+        .agg(
+            pl.col("token").str.concat("")
+            )
+        .filter(expr_filter)
+        .with_columns(pl.col("token").len().alias("total"))
+        .with_columns(
+            pl.col("token").str.to_lowercase().str.strip_chars())
+        .with_columns(
+            look_around_token + look_around_tag
+            )
+        .filter(expr)
+        .group_by("doc_id", "total")
+        .agg(
+            pl.concat_list(
+                [f"tok_lag_{i}" for i in range(-preceding, following + 1)]
+                ).alias("ngram"),
+            pl.concat_list(
+                [f"tag_lag_{i}" for i in range(-preceding, following + 1)]
+                ).alias("tags")
+            )
+        .explode(["ngram", "tags"])
+    )
+
+    if ngram_df.height == 0:
+        return ngram_df
+
+    else:
+        ngram_df = (
+            ngram_df
+            .with_columns(
+                pl.col(["ngram", "tags"]).list.to_struct()
+                )
+            .group_by(
+                ["doc_id", "total", "ngram", "tags"]
+                ).len().sort("len", descending=True)
+            .with_columns(
+                pl.struct(["ngram", "tags"])
+                )
+            .select(pl.exclude("tags"))
+            .pivot(index=["ngram", "total"],
+                   on="doc_id", values="len",
+                   aggregate_function="sum")
+            .with_columns(
+                pl.all().exclude("ngram").cast(pl.UInt32, strict=True)
+                )
+            # calculate range
+            .with_columns(
+                pl.sum_horizontal(
+                    pl.selectors.numeric().exclude("total").is_not_null()
+                    )
+                .alias("Range")
+                )
+            .with_columns(
+                pl.selectors.numeric().fill_null(strategy="zero")
+                )
+            # normalize over total documents in corpus
+            .with_columns(
+                pl.col("Range").truediv(
+                    pl.sum_horizontal(pl.selectors.numeric()
+                                      .exclude(
+                                          ["Range", "total"]
+                                          ).is_not_null())
+                    ).mul(100)
+                )
+            # calculate absolute frequency
+            .with_columns(
+                AF=pl.sum_horizontal(
+                    pl.selectors.numeric().exclude(["Range", "total"])
+                    )
+                )
+            .sort("AF", descending=True)
+            # calculate relative frequency
+            .with_columns(
+                pl.col("AF").truediv(pl.col("total")).mul(1000000)
+                .alias("RF")
+                )
+            .select(["ngram", "AF", "RF", "Range"])
+            .unnest("ngram")
+            .with_columns(
+                rename_tokens + rename_tags
+                )
+            .unnest(["ngram", "tags"])
+            )
+
+        return ngram_df
+
+
+def kwic_center_node(tokens_table: pl.DataFrame,
+                     node_word: str,
+                     ignore_case=True,
+                     search_type='fixed') -> pl.DataFrame:
     """
     Generate a KWIC table with the node word in the center column.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
+
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
     :param node_word: The token of interest
-    :param search_type: One of 'fixed', 'starts_with', 'ends_with', or 'contains'
-    :return: a dataframe with the node word in a center column and context columns on either side.
+    :param search_type: One of 'fixed', 'starts_with', \
+        'ends_with', or 'contains'
+    :return: A polars DataFrame containing with the node word \
+        in a center column and context columns on either side.
     """
-    kwic = []
-    for i in range(0,len(tok)):
-        tpf = list(tok.values())[i]
-        doc_id = list(tok.keys())[i]
-        # create a boolean vector for node word
-        if bool(ignore_case) == True and search_type == "fixed":
-            v = [t[0].strip().lower() == node_word.lower() for t in tpf]
-        elif bool(ignore_case) == False and search_type == "fixed":
-            v = [t[0].strip() == node_word for t in tpf]
-        elif bool(ignore_case) == True and search_type == "starts_with":
-            v = [t[0].strip().lower().startswith(node_word.lower()) for t in tpf]
-        elif bool(ignore_case) == False and search_type == "starts_with":
-            v = [t[0].strip().startswith(node_word) for t in tpf]
-        elif bool(ignore_case) == True and search_type == "ends_with":
-            v = [t[0].strip().lower().endswith(node_word.lower()) for t in tpf]
-        elif bool(ignore_case) == False and search_type == "ends_with":
-            v = [t[0].strip().endswith(node_word) for t in tpf]
-        elif bool(ignore_case) == True and search_type == "contains":
-            v = [node_word.lower() in t[0].strip().lower() for t in tpf]
-        elif bool(ignore_case) == False and search_type == "contains":
-            v = [node_word in t[0].strip() for t in tpf]
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
 
-        if sum(v) > 0:
-            # get indices within window around the node
-            idx = list(_index_windows_around_matches(np.array(v), left=7, right=7, flatten=False))
-            node_idx = [i for i, x in enumerate(v) if x == True]
-            start_idx = [min(x) for x in idx]
-            end_idx = [max(x) for x in idx]
-            in_span = []
-            for i in range(len(node_idx)):
-                pre_node = "".join([t[0] for t in tpf[start_idx[i]:node_idx[i]]]).strip()
-                post_node = "".join([t[0] for t in tpf[node_idx[i]+1:end_idx[i]]]).strip()
-                node = tpf[node_idx[i]][0]
-                in_span.append((doc_id, pre_node, node, post_node))
-            kwic.append(in_span)
-    kwic = [x for xs in kwic for x in xs]
-    if len(kwic) > 0:
-        df = pd.DataFrame(kwic)
-        df.columns =['Doc ID', 'Pre-Node', 'Node', 'Post-Node']
-    else:
-        df = ''
-        print('Your KWIC search did not return any results.')
-    return(df)
+    if search_type not in ['fixed', 'starts_with', 'ends_with', 'contains']:
+        raise ValueError("""
+                         Search type must be on of 'fixed',
+                         'starts_with', 'ends_with', or 'contains'.
+                         """)
 
-def keyness_table(target_counts, ref_counts, correct=False, tags_only=False):
+    if search_type == "fixed" and ignore_case:
+        expr = pl.col("token"
+                      ).str.to_lowercase(
+                      ).str.strip_chars() == node_word.lower()
+    if search_type == "fixed" and not ignore_case:
+        expr = pl.col("token"
+                      ).str.strip_chars() == node_word
+    elif search_type == "starts_with" and ignore_case:
+        expr = pl.col("token"
+                      ).str.to_lowercase(
+                      ).str.strip_chars().str.starts_with(node_word.lower())
+    elif search_type == "starts_with" and not ignore_case:
+        expr = pl.col("token"
+                      ).str.strip_chars().str.starts_with(node_word)
+    elif search_type == "ends_with" and ignore_case:
+        expr = pl.col("token"
+                      ).str.to_lowercase(
+                      ).str.strip_chars().str.ends_with(node_word.lower())
+    elif search_type == "ends_with" and not ignore_case:
+        expr = pl.col("token"
+                      ).str.ends_with(node_word)
+    elif search_type == "contains" and ignore_case:
+        expr = pl.col("token"
+                      ).str.to_lowercase(
+                      ).str.strip_chars().str.contains(node_word.lower())
+    elif search_type == "contains" and not ignore_case:
+        expr = pl.col("token"
+                      ).str.strip_chars().str.contains(node_word)
+
+    preceding = 7
+    following = 7
+
+    look_around_token = [
+        pl.col("token").shift(-i).alias(
+            f"tok_lag_{i}") for i in range(
+                -preceding, following + 1)]
+
+    kwic_df = (
+        tokens_table
+        .group_by(["doc_id", "pos_id"], maintain_order=True)
+        .agg(
+            pl.col("token").str.concat("")
+            )
+        .with_columns(
+            look_around_token
+            )
+        .filter(expr)
+        .group_by("doc_id")
+        .agg(
+            pl.concat_list([f"tok_lag_{i}" for i in range(
+                -preceding, following + 1)]).alias("node")
+            )
+        .explode("node")
+        .with_columns(
+            pre_node=pl.col("node").list.head(7)
+        )
+        .with_columns(
+            post_node=pl.col("node").list.tail(7)
+        )
+        .with_columns(
+            pl.col("node").list.get(7)
+        )
+        .with_columns(
+            pl.col("pre_node").list.join("")
+        )
+        .with_columns(
+            pl.col("post_node").list.join("")
+        )
+        .select(["doc_id", "pre_node", "node", "post_node"])
+        .sort("doc_id")
+        .rename({"doc_id": "Doc ID",
+                 "pre_node": "Pre-Node",
+                 "node": "Node",
+                 "post_node": "Post-Node"})
+    )
+
+    return kwic_df
+
+
+def coll_table(tokens_table: pl.DataFrame,
+               node_word: str,
+               preceding=4,
+               following=4,
+               statistic='npmi',
+               count_by='pos',
+               node_tag=None) -> pl.DataFrame:
     """
-    Generate a keyness table comparing token frequencies from a taget and a reference corpus
-    
-    :param target_counts: A frequency table from a target corpus
-    :param ref_counts: A frequency table from a reference corpus
-    :param correct: If True, apply the Yates correction to the log-likelihood calculation
-    :param tags_only: If True, it is assumed the frequency tables are of the type produce by the tags_table function
-    :return: a dataframe of absolute frequencies, normalized frequencies (per million tokens) and ranges for both corpora, as well as keyness values as calculated by log-likelihood and effect size as calculated by Log Ratio.
-    """
-    total_target = target_counts['AF'].sum()
-    total_reference = ref_counts['AF'].sum()
-    if bool(tags_only) == True:
-        df_1 = target_counts.set_axis(['Tag','AF', 'RF', 'Range'], axis=1)
-    else:
-        df_1 = target_counts.set_axis(['Token', 'Tag','AF', 'RF', 'Range'], axis=1)
-    if bool(tags_only) == True:
-        df_2 = ref_counts.set_axis(['Tag', 'AF Ref', 'RF Ref', 'Range Ref'], axis=1)
-    else:
-        df_2 = ref_counts.set_axis(['Token', 'Tag', 'AF Ref', 'RF Ref', 'Range Ref'], axis=1)
-    if bool(tags_only) == True:
-        df = pd.merge(df_1, df_2, how='outer', on=['Tag'])
-    else:
-        df = pd.merge(df_1, df_2, how='outer', on=['Token', 'Tag'])
-    df.fillna(0, inplace=True)
-    if bool(correct) == True:
-        df['LL'] = np.vectorize(_log_like)(df['AF'], df['AF Ref'], total_target, total_reference, correct=True)
-    else:
-        df['LL'] = np.vectorize(_log_like)(df['AF'], df['AF Ref'], total_target, total_reference, correct=False)
-    df['LR'] = np.vectorize(_log_ratio)(df['AF'], df['AF Ref'], total_target, total_reference)
-    df['PV'] = chi2.sf(abs(df['LL']), 1)
-    df.PV = df.PV.round(5)
-    if bool(tags_only) == True:
-        df = df.iloc[:, [0,7,8,9,1,2,3,4,5,6]]
-        df.sort_values(by='LL', ascending=False, inplace=True)
-    else:
-        df = df.iloc[:, [0,1,8,9,10,2,3,4,5,6,7]]
-        df.sort_values(by=['LL', 'Token'], ascending=[False, True], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    return(df)
+    Generate a table of collocations by association measure.
 
-def tag_ruler(tok, key, count_by='pos'):
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
+    :param node_word: The token around with collocations are measured
+    :param preceding: An integer between 0 and 9 \
+        representing the span to the left of the node word
+    :param following: An integer between 0 and 9 \
+        representing the span to the right of the node word
+    :param statistic: The association measure to be calculated. \
+        One of: 'pmi', 'npmi', 'pmi2', 'pmi3'
+    :param count_by: One of 'pos' or 'ds' for aggregating tokens
+    :param node_tag: A value specifying the first character or characters \
+        of the node word tag. \
+            If the node_word were 'can', a node_tag 'V' \
+                would search for can as a verb.
+    :return: a polars DataFrame containing collocate tokens, tags, \
+        the absolute frequency the collocate in the corpus, \
+            the absolute frequency of the collocate within the span, \
+                and the association measure.
+    """
+    stat_types = ['pmi', 'npmi', 'pmi2', 'pmi3']
+    if statistic not in stat_types:
+        raise ValueError("""
+                         Invalid statistic type. Expected one of: %s
+                         """ % stat_types)
+
+    count_types = ['pos', 'ds']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
+    if count_by == 'pos':
+        grouping_tag = "pos_tag"
+        grouping_id = "pos_id"
+        expr_filter = pl.col("pos_tag") != "Y"
+    else:
+        grouping_tag = "ds_tag"
+        grouping_id = "ds_id"
+        expr_filter = ~(pl.col("token").str.contains("^[[[:punct:]] ]+$") &
+                        pl.col("ds_tag").str.contains("Untagged"))
+
+    if node_tag is None:
+        expr = pl.col("token") == node_word.lower()
+    else:
+        expr = (
+            pl.col("token") == node_word.lower()
+            ) & (pl.col(grouping_tag).str.starts_with(node_tag))
+
+    look_around_token = [
+        pl.col("token")
+        .shift(-i).alias(f"tok_lag_{i}") for i in range(
+            -preceding, following + 1
+            )]
+
+    look_around_tag = [
+        pl.col(grouping_tag)
+        .shift(-i).alias(f"tag_lag_{i}") for i in range(
+            -preceding, following + 1
+            )]
+
+    total_df = (
+        tokens_table
+        .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
+        .agg(
+            pl.col("token").str.concat("")
+            )
+        .with_columns(
+            pl.col("token").str.to_lowercase().str.strip_chars())
+        .filter(expr_filter)
+        .group_by(["token", grouping_tag]).len(name="Freq_Total")
+        .rename({"token": "Token", grouping_tag: "Tag"})
+    )
+
+    token_total = sum(total_df.get_column("Freq_Total"))
+
+    if node_tag is None:
+        node_freq = total_df.filter(
+            pl.col("Token") == node_word
+            ).get_column("Freq_Total").sum()
+
+    else:
+        node_freq = total_df.filter(
+            (pl.col("Token") == node_word.lower()) &
+            (pl.col("Tag").str.starts_with(node_tag))
+            ).get_column("Freq_Total").sum()
+
+    if node_freq == 0:
+        coll_df = pl.DataFrame(schema=[("Token", pl.String),
+                                       ("Tag", pl.String),
+                                       ("Freq Span", pl.UInt32),
+                                       ("Freq Total", pl.UInt32),
+                                       ("MI", pl.Float64)])
+        return coll_df
+
+    if statistic == 'pmi':
+        mi_funct = pl.col(
+            "Freq_Span"
+            ).truediv(token_total
+                      ).log(base=2).sub(
+                          pl.col(
+                              "Freq_Total"
+                              ).truediv(token_total
+                                        ).mul(node_freq
+                                              ).truediv(token_total
+                                                        ).log(base=2)
+                        )
+
+    if statistic == 'npmi':
+        mi_funct = pl.col(
+            "Freq_Span"
+            ).truediv(token_total
+                      ).log(base=2).sub(
+                          pl.col("Freq_Total"
+                                 ).truediv(token_total
+                                           ).mul(node_freq
+                                                 ).truediv(token_total
+                                                           ).log(base=2)
+                        ).truediv(
+                            pl.col("Freq_Span").truediv(token_total
+                                                        ).log(base=2).neg()
+                            )
+
+    if statistic == 'pmi2':
+        mi_funct = pl.col(
+            "Freq_Span"
+            ).truediv(token_total
+                      ).log(base=2).sub(
+                          pl.col("Freq_Total"
+                                 ).truediv(token_total
+                                           ).mul(node_freq
+                                                 ).truediv(token_total
+                                                           ).log(base=2)
+                        ).sub(
+                            pl.col("Freq_Span").truediv(token_total
+                                                        ).log(base=2).mul(-1)
+                            )
+
+    if statistic == 'pmi3':
+        mi_funct = pl.col(
+            "Freq_Span"
+            ).truediv(token_total
+                      ).log(base=2).sub(
+                pl.col("Freq_Total"
+                       ).truediv(token_total
+                                 ).mul(node_freq
+                                       ).truediv(token_total
+                                                 ).log(base=2)
+                       ).sub(
+                           pl.col("Freq_Span").truediv(token_total
+                                                       ).log(base=2).mul(-2)
+                           )
+
+    coll_df = (
+        tokens_table
+        .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
+        .agg(
+            pl.col("token").str.concat("")
+            )
+        .with_columns(
+            pl.col("token").str.to_lowercase().str.strip_chars())
+        .filter(
+            pl.col('token').str.contains("[a-z]")
+            )
+        .with_columns(
+            look_around_token + look_around_tag
+            )
+        .filter(expr)
+        # .drop(["tok_lag_0", "tag_lag_0"])
+        .group_by("doc_id")
+        .agg(
+            pl.concat_list(
+                [f"tok_lag_{i}" for i in range(-preceding, following + 1)]
+                ).alias("span_tok"),
+            pl.concat_list(
+                [f"tag_lag_{i}" for i in range(-preceding, following + 1)]
+                ).alias("span_tag")
+            )
+        .explode(["span_tok", "span_tag"])
+        .with_columns(
+                pre_node_tok=pl.col("span_tok").list.head(preceding),
+                pre_node_tag=pl.col("span_tag").list.head(preceding)
+            )
+        .with_columns(
+                post_node_tok=pl.col("span_tok").list.tail(following),
+                post_node_tag=pl.col("span_tag").list.tail(following)
+            )
+        .drop(["span_tok", "span_tag"])
+        .with_columns(
+            Token=pl.col("pre_node_tok").list.concat("post_node_tok"),
+            Tag=pl.col("pre_node_tag").list.concat("post_node_tag")
+            )
+        .select(["Token", "Tag"])
+        .explode(["Token", "Tag"])
+        .group_by(["Token", "Tag"]).len(name="Freq_Span")
+        .sort("Freq_Span")
+        .join(total_df, on=["Token", "Tag"])
+        .with_columns(
+            MI=mi_funct
+            )
+        .rename({"Freq_Span": "Freq Span", "Freq_Total": "Freq Total"})
+        .sort("MI", "Token", descending=[True, False])
+    )
+
+    return coll_df
+
+
+def keyness_table(target_frequencies: pl.DataFrame,
+                  reference_frequencies: pl.DataFrame,
+                  correct=False,
+                  tags_only=False,
+                  swap_target=False,
+                  threshold=.01):
+    """
+    Generate a keyness table comparing token frequencies \
+        from a taget and a reference corpus
+
+    :param target_frequencies: A frequency table from a target corpus
+    :param reference_frequencies: A frequency table from a reference corpus
+    :param correct: If True, apply the Yates correction \
+        to the log-likelihood calculation
+    :param tags_only: If True, it is assumed the frequency tables \
+        are of the type produced by the tags_table function
+    :return: a polars DataFrame of absolute frequencies, \
+        normalized frequencies (per million tokens) \
+            and ranges for both corpora, \
+                as well as keyness values as calculated by \
+                    log-likelihood and effect size as calculated by Log Ratio.
+    """
+    if not tags_only:
+        validation = OrderedDict([('Token', pl.String),
+                                  ('Tag', pl.String),
+                                  ('AF', pl.UInt32),
+                                  ('RF', pl.Float64),
+                                  ('Range', pl.Float64)])
+        if (
+            target_frequencies.collect_schema() != validation
+            or reference_frequencies.collect_schema() != validation
+        ):
+            raise ValueError("""
+                            Invalid DataFrame.
+                            Expected DataFrames produced by frequency_table.
+                            """)
+    if tags_only:
+        validation = OrderedDict([('Tag', pl.String),
+                                  ('AF', pl.UInt32),
+                                  ('RF', pl.Float64),
+                                  ('Range', pl.Float64)])
+        if (
+            target_frequencies.collect_schema() != validation
+            or reference_frequencies.collect_schema() != validation
+        ):
+            raise ValueError("""
+                            Invalid DataFrame.
+                            Expected DataFrames produced by tags_table.
+                            """)
+
+    total_target = target_frequencies.get_column("AF").sum()
+    total_reference = reference_frequencies.get_column("AF").sum()
+    total_tokens = total_target + total_reference
+
+    if not correct:
+        correction_tar = pl.col("AF")
+        correction_ref = pl.col("AF_Ref")
+    if correct:
+        correction_tar = pl.col("AF").sub(
+            .5 * pl.col("AF").sub(
+                (pl.col("AF").add(
+                    pl.col("AF_Ref")
+                    ).mul(total_target / total_tokens))
+                ).abs().truediv(pl.col("AF").sub((pl.col("AF").add(
+                    pl.col("AF_Ref")
+                    ).mul(total_target / total_tokens))))
+            )
+        correction_ref = pl.col("AF_Ref").add(
+            .5 * pl.col("AF").sub(
+                (pl.col("AF").add(
+                    pl.col("AF_Ref")
+                    ).mul(total_target / total_tokens))
+                ).abs().truediv(pl.col("AF").sub((pl.col("AF").add(
+                    pl.col("AF_Ref")
+                    ).mul(total_target / total_tokens))))
+            )
+
+    if not tags_only:
+        kw_df = target_frequencies.join(
+            reference_frequencies, on=["Token", "Tag"],
+            how="full",
+            coalesce=True,
+            suffix="_Ref"
+            ).fill_null(strategy="zero")
+    if tags_only:
+        kw_df = target_frequencies.join(
+            reference_frequencies, on="Tag",
+            how="full",
+            coalesce=True,
+            suffix="_Ref"
+            ).fill_null(strategy="zero")
+
+    kw_df = (
+        kw_df
+        .with_columns(
+            pl.when(
+                pl.col("AF")
+                .sub((pl.col("AF")
+                      .add(pl.col("AF_Ref"))
+                      .mul(total_target / total_tokens))).abs() > .25
+                    )
+            .then(correction_tar)
+            .otherwise(pl.col("AF"))
+            .alias("AF_Yates")
+            )
+        .with_columns(
+            pl.when(
+                pl.col("AF")
+                .sub((pl.col("AF")
+                      .add(pl.col("AF_Ref"))
+                      .mul(total_target / total_tokens))).abs() > .25
+                    )
+            .then(correction_ref)
+            .otherwise(pl.col("AF_Ref"))
+            .alias("AF_Ref_Yates")
+            )
+        .with_columns(
+            pl.when(pl.col("AF_Yates") > 0)
+            .then(
+                pl.col("AF_Yates")
+                .mul(pl.col("AF_Yates")
+                     .truediv(pl.col("AF_Yates")
+                              .add(pl.col("AF_Ref"))
+                              .mul(total_target / total_tokens)).log())
+                              )
+            .otherwise(0)
+            .alias("L1")
+            )
+        .with_columns(
+            pl.when(pl.col("AF_Ref_Yates") > 0)
+            .then(
+                pl.col("AF_Ref_Yates")
+                .mul(pl.col("AF_Ref_Yates")
+                     .truediv(pl.col("AF_Yates")
+                              .add(pl.col("AF_Ref_Yates"))
+                              .mul(total_reference / total_tokens)).log())
+                              )
+            .otherwise(0)
+            .alias("L2")
+            )
+        .with_columns(
+            pl.when(pl.col("RF") > pl.col("RF_Ref"))
+            .then(
+                pl.col("L1")
+                .add(pl.col("L2")).mul(2).abs()
+            )
+            .otherwise(
+                pl.col("L1")
+                .add(pl.col("L2")).mul(2).abs().neg()
+            )
+            .alias("LL")
+        )
+        .with_columns(
+            pl.when(pl.col("AF_Ref") == 0)
+            .then(
+                pl.col("AF")
+                .truediv(total_target)
+                .truediv(.5 / total_reference).log(base=2)
+            )
+            .when(pl.col("AF") == 0)
+            .then(
+                pl.col("AF_Ref")
+                .truediv(total_reference)
+                .truediv(.5 / total_target).log(base=2).neg()
+            )
+            .otherwise(
+                pl.col("AF")
+                .truediv(total_target)
+                .truediv(pl.col("AF_Ref")
+                         .truediv(total_reference)).log(base=2)
+            )
+            .alias("LR")
+        )
+        .with_columns(
+            pl.col("LL").abs().map_elements(lambda x: chi2.sf(x, 1),
+                                            return_dtype=pl.Float64)
+            .alias("PV")
+        )
+        .sort("LL", descending=True)
+        .filter(pl.col("PV") < threshold)
+    )
+
+    if not swap_target:
+        kw_df = (
+            kw_df
+            .filter(pl.col("LL") > 0)
+        )
+    if swap_target:
+        kw_df = (
+            kw_df
+            .with_columns(pl.col(
+                ["LL", "LR"]
+                ).mul(-1))
+            .sort("LL", descending=True)
+            .filter(pl.col("LL") > 0)
+        )
+
+    if not tags_only:
+        return kw_df.select(["Token", "Tag", "LL", "LR", "PV",
+                             "RF", "RF_Ref", "AF", "AF_Ref",
+                             "Range", "Range_Ref"])
+
+    if tags_only:
+        return kw_df.select(["Tag", "LL", "LR", "PV",
+                             "RF", "RF_Ref", "AF", "AF_Ref",
+                             "Range", "Range_Ref"])
+
+
+def tag_ruler(tokens_table: pl.DataFrame,
+              doc_id: Union[str, int],
+              count_by='pos'):
     """
     Retrieve spans of tags to facitiatve tag highligting in a single text.
-    
-    :param tok: A dictionary of tuples as generated by the convert_corpus function
-    :param key: A document name as stored as one of the keys in the tok dictionary
+
+    :param tokens_table: A polars DataFrame \
+        as generated by the docuscope_parse function
+    :param doc_id: A document name \
+        or an integer representing the index of a document id
     :param count_by: One of 'pos' or 'ds' for aggregating tokens
-    :return: A dataframe including all tokens, tags, tags start index, and tag end index
+    :return: A dataframe including all tokens, tags, \
+        tags start indices, and tag end indices
     """
-    tpf = list(tok.get(key))
-    if count_by == 'ds':
-        token_tp = tpf
+    count_types = ['pos', 'ds']
+    if count_by not in count_types:
+        raise ValueError("""
+                         Invalid count_by type. Expected one of: %s
+                         """ % count_types)
+
+    validation = OrderedDict([('doc_id', pl.String),
+                              ('token', pl.String),
+                              ('pos_tag', pl.String),
+                              ('ds_tag', pl.String),
+                              ('pos_id', pl.UInt32),
+                              ('ds_id', pl.UInt32)])
+    if tokens_table.collect_schema() != validation:
+        raise ValueError("""
+                         Invalid DataFrame.
+                         Expected a DataFrame produced by docuscope_parse.
+                         """)
+    max_id = tokens_table.select(pl.col("doc_id").unique().count()).item() - 1
+    if type(doc_id) is int and doc_id > max_id:
+        raise ValueError("""
+                    Invalid doc_id. Expected an integer < or = %s
+                         """ % max_id)
+
+    if type(doc_id) is int:
+        doc = tokens_table.select(
+            pl.col("doc_id").unique()
+            ).to_dicts()[doc_id].get("doc_id")
     else:
-        token_list = [x[0] for x in tpf]
-        tag_list = [x[1] for x in tpf]
-        tag_seq = [re.findall(r'\d\d$', x) for x in tag_list]
-        tag_seq = [x for sublist in tag_seq for x in (sublist or ['99'])]
-        tag_seq = [int(x) for x in tag_seq]
-        tag_seq = list(_groupby_consecutive(lst=tag_seq))
-        for x in tag_seq:
-            x[0] = re.sub('\\d+', 'B-', str(x[0]))
-        tag_seq = [x for xs in tag_seq for x in xs]
-        tag_seq = ['I-' if isinstance(x, int) else x for x in tag_seq]
-        tag_seq = [a_+str(b_) for a_,b_ in zip(tag_seq, tag_list)]
-        tag_seq = [re.sub(r'\d\d$', '', x) for x in tag_seq]
-        token_tp = list(zip(token_list, tag_list, tag_seq))
-    ne_tree = _conlltags2tree(token_tp)
-    agg_tokens = []
-    for subtree in ne_tree:
-        if type(subtree) == Tree:
-            original_label = subtree.label()
-            original_string = "".join([token for token, pos in subtree.leaves()])
-        else:
-            original_label = 'Untagged'
-            original_string = subtree[0]
-        agg_tokens.append((original_string, original_label))
-    df = pd.DataFrame(agg_tokens, columns=['Token', 'Tag'])
-    tag_len = list(df['Token'].str.len())
-    tag_start = [0] + tag_len[:-1]
-    tag_start = np.cumsum(tag_start)
-    tag_end = np.cumsum(tag_len)
-    s = re.compile('\s$')    
-    s_final = [bool(s.search(x)) for x in df['Token']]
-    tag_end = np.where(np.array(s_final)==True, tag_end-1, tag_end)
-    df = df.assign(tag_start = tag_start,
-                   tag_end = tag_end)
-    return(df)
+        doc = doc_id
+
+    ruler_df = (
+        tokens_table
+        .filter(pl.col("doc_id") == doc)
+    )
+
+    if ruler_df.height < 1:
+        return ruler_df
+
+    if count_by == 'pos':
+        ruler_df = (
+            ruler_df
+            .select(["token", "pos_tag"])
+            .rename({"token": "Token", "pos_tag": "Tag"})
+        )
+    else:
+        ruler_df = (
+            ruler_df
+            .select(["token", "ds_tag"])
+            .rename({"token": "Token", "ds_tag": "Tag"})
+         )
+    ruler_df = (
+            ruler_df
+            .with_columns(
+                pl.col("Token").str.len_chars()
+                .alias("tag_end")
+                )
+            .with_columns(
+                pl.col("tag_end").shift(1, fill_value=0).cum_sum()
+                .alias("tag_start")
+                )
+            .with_columns(
+                pl.col("tag_end").cum_sum()
+                )
+            .with_columns(
+                pl.when(pl.col("Token").str.contains("\\s$"))
+                .then(
+                    pl.col("tag_end").sub(1)
+                    )
+                .otherwise(pl.col("tag_end"))
+                )
+            .select(["Token", "Tag", "tag_start", "tag_end"])
+            )
+    return ruler_df
