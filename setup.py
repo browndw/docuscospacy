@@ -3,24 +3,22 @@ from setuptools import setup, find_packages
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '0.2.4'
+VERSION = '0.3.1'
 PACKAGE_NAME = 'docuscospacy'
 AUTHOR = 'David Brown'
 AUTHOR_EMAIL = 'dwb2@andrew.cmu.edu'
 URL = 'https://github.com/browndw/docuscospacy'
 
 LICENSE = 'Apache License 2.0'
-DESCRIPTION = 'Support for spaCy models trained on DocuScope and the CLAWS7 tagset'
+DESCRIPTION = 'Support for spaCy models trained on \
+      DocuScope and the CLAWS7 tagset'
 LONG_DESCRIPTION = (HERE / "README.rst").read_text()
 LONG_DESC_TYPE = "text/x-rst"
 
 INSTALL_REQUIRES = [
-      'numpy>=1.22.0',
-      'pandas>=1.4.0',
-      'tmtoolkit>=0.11.0',
-      'spacy>=3.3.0',
-      'bidict>=0.21.0',
-      'loky>=3.0.0'
+      'polars>=1.15.0',
+      'spacy>=3.5.0',
+      'scipy>=1.11.0'
 ]
 
 setup(name=PACKAGE_NAME,

@@ -6,7 +6,12 @@ docuscospacy: Support for spaCy models trained on DocuScope and the CLAWS7 tagse
 
 The *docuscospacy* package contains a set of functions to facilitate the processing of tagged corpora using:
 
-* `en_docusco_spacy <https://huggingface.co/browndw/en_docusco_spacy>`_ -- a spaCy model trained on the `CLAWS7 <https://ucrel.lancs.ac.uk/claws7tags.html>`_ tagset and `DocuScope <https://docuscospacy.readthedocs.io/en/latest/docuscope.html>`_; and
+* `en_docusco_spacy <https://huggingface.co/browndw/en_docusco_spacy>`_ -- a spaCy model trained on the `CLAWS7 <https://ucrel.lancs.ac.uk/claws7tags.html>`_ tagset and `DocuScope <https://docuscospacy.readthedocs.io/en/latest/docuscope.html>`_
+
+The current version of the package runs in `polars <https://docs.pola.rs/api/python/stable/reference/index.html>`_
+
+The package can also convert a corpus to and from:
+
 * `tmtoolkit <https://tmtoolkit.readthedocs.io/en/latest/>`_ --  a set of tools for text mining and topic modeling
 
 The documentation for docuscospacy is available on `docuscospacy.readthedocs.org <https://docuscospacy.readthedocs.org>`_ and the GitHub code repository is on
@@ -20,14 +25,25 @@ Requirements and installation
 The recommended way of installing *docuscospacy* is to:
 
 - create and activate a `Python Virtual Environment ("venv") <https://docs.python.org/3/tutorial/venv.html>`_ 
-- install `spacy <https://spacy.io/usage>`_ and `tmtoolkit <https://tmtoolkit.readthedocs.io/en/latest/install.html>`__ with a recommended set of dependencies
-- download the `en_docusco_spacy <https://huggingface.co/browndw/en_docusco_spacy>`_ model
+- install `spacy <https://spacy.io/usage>`_
 - install `docuscospacy <https://docuscospacy.readthedocs.io/en/latest/install.html>`_
+- download the `en_docusco_spacy <https://huggingface.co/browndw/en_docusco_spacy>`_ model
 
 .. code-block:: text
 
     pip install docuscospacy
 
+Note that installing the model depends on your spaCy version. Some versions allow:
+
+.. code-block:: model-1
+
+    !pip install https://huggingface.co/browndw/en_docusco_spacy/resolve/main/en_docusco_spacy-any-py3-none-any.whl
+
+But new ones may require:
+
+.. code-block:: model-2
+
+    pip install "en_docusco_spacy @ https://huggingface.co/browndw/en_docusco_spacy/resolve/main/en_docusco_spacy-any-py3-none-any.whl"
 
 Features
 --------

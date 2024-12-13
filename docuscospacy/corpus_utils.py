@@ -81,7 +81,7 @@ def corpus_from_folder(directory: str) -> pl.DataFrame:
 
 
 def dtm_weight(dtm: pl.DataFrame,
-               scheme="prop"):
+               scheme="prop") -> pl.DataFrame:
     """
     A function for weighting a document-term-matrix.
 
@@ -162,7 +162,7 @@ def dtm_weight(dtm: pl.DataFrame,
         return weighted_df
 
 
-def dtm_simplify(dtm: pl.DataFrame):
+def dtm_simplify(dtm: pl.DataFrame) -> pl.DataFrame:
     """
     A function for aggregating part-of-speech tags \
         into more general lexical categories \
@@ -221,7 +221,7 @@ def dtm_simplify(dtm: pl.DataFrame):
     return simple_dtm
 
 
-def freq_simplify(frequency_table: pl.DataFrame):
+def freq_simplify(frequency_table: pl.DataFrame) -> pl.DataFrame:
     """
     A function for aggregating part-of-speech tags \
         into more general lexical categories \
@@ -278,7 +278,7 @@ def freq_simplify(frequency_table: pl.DataFrame):
     return simple_df
 
 
-def tags_simplify(dtm: pl.DataFrame):
+def tags_simplify(dtm: pl.DataFrame) -> pl.DataFrame:
     """
     A function for aggregating part-of-speech tags \
         into more general lexical categories \
@@ -339,7 +339,7 @@ def tags_simplify(dtm: pl.DataFrame):
     return simple_df
 
 
-def dtm_to_coo(dtm: pl.DataFrame):
+def dtm_to_coo(dtm: pl.DataFrame) -> coo_matrix:
     """
     A function for converting a tags dtm to a COOrdinate format.
 
