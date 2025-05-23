@@ -1,5 +1,5 @@
-importlib-resources>=6.5.0'
-polars>=1.30.0'
-spacy>=3.8.0'
+importlib-resources>=6.5.0
+polars>=1.30.0
+spacy>=3.8.0
 scipy>=1.15.0
 en_docusco_spacy @ https://huggingface.co/browndw/en_docusco_spacy/resolve/main/en_docusco_spacy-any-py3-none-any.whl
