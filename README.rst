@@ -2,7 +2,7 @@
 
 docuscospacy: Support for spaCy models trained on DocuScope and the CLAWS7 tagset
 =================================================================================
-|pypi| |pypi_downloads| |rtd| |zenodo|
+|pypi| |tests| |pypi_downloads| |rtd| |zenodo|
 
 The *docuscospacy* package contains a set of functions to facilitate the processing of tagged corpora using:
 
@@ -37,7 +37,7 @@ Note that installing the model depends on your spaCy version. Some versions allo
 
 .. code-block:: model-1
 
-    !pip install https://huggingface.co/browndw/en_docusco_spacy/resolve/main/en_docusco_spacy-any-py3-none-any.whl
+    pip install https://huggingface.co/browndw/en_docusco_spacy/resolve/main/en_docusco_spacy-any-py3-none-any.whl
 
 But new ones may require:
 
@@ -55,7 +55,7 @@ The docuscospacy package supports the post-tagging generation of:
 
 - `Tagged token frequency tables <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Frequency-tables>`_
 - `Tag frequency tables <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Tags-tables>`_
-- `Ngram/ntag tables <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Ngram-tables>`_
+- `Ngram tables and cluster <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Ngram-tables>`_
 - `Collocation tables around a node word and tag <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Collocations>`_
 - `Document term matrices for tags <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Document-term-matrices-for-tags>`_
 - `Keyword comparisons against a reference corpus <https://docuscospacy.readthedocs.io/en/latest/corpus_analysis.html#Keyword-tables>`_
@@ -90,6 +90,10 @@ See `LICENSE <https://github.com/browndw/docuscospacy/blob/master/LICENSE>`_ fil
 .. |pypi| image:: https://badge.fury.io/py/docuscospacy.svg
     :target: https://badge.fury.io/py/docuscospacy
     :alt: PyPI Version
+
+.. |tests| image:: https://github.com/browndw/docuscospacy/actions/workflows/test.yml/badge.svg
+    :target: https://github.com/browndw/docuscospacy/actions/workflows/test.yml
+    :alt: Test Status
 
 .. |pypi_downloads| image:: https://img.shields.io/pypi/dm/docuscospacy
     :target: https://pypi.org/project/docuscospacy/
