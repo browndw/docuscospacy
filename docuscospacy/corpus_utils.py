@@ -91,14 +91,16 @@ def dtm_weight(dtm: pl.DataFrame,
             or 'tfidf' (term-frequency-inverse-document-frequency).
     :return: A polars DataFrame of weighted values.
     """
-    if (
-        not all(x == pl.UInt32 for x in dtm.collect_schema().dtypes()[1:]) and
-        dtm.columns[0] != "doc_id"
-    ):
+    if dtm.columns[0] != "doc_id":
         raise ValueError("""
-                         Invalid DataFrame.
-                         Expected a DataFrame produced by tags_dtm.
-                         """)
+                        Invalid DataFrame.
+                        Expected a DataFrame produced by tags_dtm with 'doc_id' as the first column.
+                        """)  # noqa: E501
+    if not all(pl.UInt32 for x in dtm.collect_schema().dtypes()[1:]):
+        raise ValueError("""
+                        Invalid DataFrame.
+                        All columns except 'doc_id' must be numeric.
+                        """)
 
     scheme_types = ['prop', 'scale', 'tfidf']
     if scheme not in scheme_types:
@@ -172,14 +174,16 @@ def dtm_simplify(dtm: pl.DataFrame) -> pl.DataFrame:
     :return: A polars DataFrame of absolute frequencies, \
         normalized frequencies(per million tokens) and ranges.
     """
-    if (
-        not all(x == pl.UInt32 for x in dtm.collect_schema().dtypes()[1:]) and
-        dtm.columns[0] != "doc_id"
-    ):
+    if dtm.columns[0] != "doc_id":
         raise ValueError("""
-                         Invalid DataFrame.
-                         Expected a DataFrame produced by tags_dtm.
-                         """)
+                        Invalid DataFrame.
+                        Expected a DataFrame produced by tags_dtm with 'doc_id' as the first column.
+                        """)  # noqa: E501
+    if not all(pl.UInt32 for x in dtm.collect_schema().dtypes()[1:]):
+        raise ValueError("""
+                        Invalid DataFrame.
+                        All columns except 'doc_id' must be numeric.
+                        """)
     tag_prefix = ["NN", "VV", "II"]
     if (not any(
         x.startswith(tuple(tag_prefix)) for x in
@@ -288,14 +292,16 @@ def tags_simplify(dtm: pl.DataFrame) -> pl.DataFrame:
     :return: A polars DataFrame of absolute frequencies, \
         normalized frequencies(per million tokens) and ranges.
     """
-    if (
-        not all(x == pl.UInt32 for x in dtm.collect_schema().dtypes()[1:]) and
-        dtm.columns[0] != "doc_id"
-    ):
+    if dtm.columns[0] != "doc_id":
         raise ValueError("""
-                         Invalid DataFrame.
-                         Expected a DataFrame produced by tags_dtm.
-                         """)
+                        Invalid DataFrame.
+                        Expected a DataFrame produced by tags_dtm with 'doc_id' as the first column.
+                        """)  # noqa: E501
+    if not all(pl.UInt32 for x in dtm.collect_schema().dtypes()[1:]):
+        raise ValueError("""
+                        Invalid DataFrame.
+                        All columns except 'doc_id' must be numeric.
+                        """)
     tag_prefix = ["NN", "VV", "II"]
     if (not any(
         x.startswith(tuple(tag_prefix)) for x in

@@ -177,6 +177,10 @@ def docuscope_parse(corp: pl.DataFrame,
                          Invalid DataFrame.
                          Expected a DataFrame with 2 columns (doc_id & text).
                          """)
+    # Check if the corpus is empty
+    # Remove rows where text is None
+    corp = corp.filter(pl.col("text").is_not_null())
+
     if nlp_model.lang + '_' + nlp_model.meta['name'] != 'en_docusco_spacy':
         raise ValueError("""
                          Invalid spaCy model. Expected 'en_docusco_spacy'.
@@ -447,7 +451,7 @@ def frequency_table(tokens_table: pl.DataFrame,
         tokens_table
         .group_by(["doc_id", "pos_id", "pos_tag"], maintain_order=True)
         .agg(
-            pl.col("token").str.concat("")
+            pl.col("token").str.join("")
         )
         .with_columns(
             pl.col("token").str.to_lowercase().str.strip_chars())
@@ -474,7 +478,7 @@ def frequency_table(tokens_table: pl.DataFrame,
             tokens_table
             .group_by(["doc_id", "ds_id", "ds_tag"], maintain_order=True)
             .agg(
-                pl.col("token").str.concat("")
+                pl.col("token").str.join("")
             )
             .with_columns(
                 pl.col("token").str.to_lowercase().str.strip_chars())
@@ -891,7 +895,7 @@ def ngrams(tokens_table: pl.DataFrame,
         tokens_table
         .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
         .agg(
-            pl.col("token").str.concat("")
+            pl.col("token").str.join("")
             )
         .filter(expr_filter)
         .with_columns(pl.col("token").len().alias("total"))
@@ -1072,7 +1076,7 @@ def clusters_by_token(tokens_table: pl.DataFrame,
         tokens_table
         .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
         .agg(
-            pl.col("token").str.concat("")
+            pl.col("token").str.join("")
             )
         .filter(expr_filter)
         .with_columns(pl.col("token").len().alias("total"))
@@ -1242,7 +1246,7 @@ def clusters_by_tag(tokens_table: pl.DataFrame,
         tokens_table
         .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
         .agg(
-            pl.col("token").str.concat("")
+            pl.col("token").str.join("")
             )
         .filter(expr_filter)
         .with_columns(pl.col("token").len().alias("total"))
@@ -1402,7 +1406,7 @@ def kwic_center_node(tokens_table: pl.DataFrame,
         tokens_table
         .group_by(["doc_id", "pos_id"], maintain_order=True)
         .agg(
-            pl.col("token").str.concat("")
+            pl.col("token").str.join("")
             )
         .with_columns(
             look_around_token
@@ -1525,7 +1529,7 @@ def coll_table(tokens_table: pl.DataFrame,
         tokens_table
         .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
         .agg(
-            pl.col("token").str.concat("")
+            pl.col("token").str.join("")
             )
         .with_columns(
             pl.col("token").str.to_lowercase().str.strip_chars())
@@ -1617,7 +1621,7 @@ def coll_table(tokens_table: pl.DataFrame,
         tokens_table
         .group_by(["doc_id", grouping_id, grouping_tag], maintain_order=True)
         .agg(
-            pl.col("token").str.concat("")
+            pl.col("token").str.join("")
             )
         .with_columns(
             pl.col("token").str.to_lowercase().str.strip_chars())
