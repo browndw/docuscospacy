@@ -181,12 +181,15 @@ def docuscope_parse(corp: pl.DataFrame,
     # Remove rows where text is None
     corp = corp.filter(pl.col("text").is_not_null())
 
-    if nlp_model.lang + '_' + nlp_model.meta['name'] != 'en_docusco_spacy':
-        raise ValueError("""
-                         Invalid spaCy model. Expected 'en_docusco_spacy'.
-                         For information and instructions see:
-                         https://huggingface.co/browndw/en_docusco_spacy
-                         """)
+    model_name = nlp_model.lang + '_' + nlp_model.meta['name']
+    if not model_name.startswith('en_docusco_spacy'):
+        raise ValueError(
+            """
+            Invalid spaCy model. Expected a model starting with 'en_docusco_spacy'.
+            For information and instructions see:
+            https://huggingface.co/browndw/en_docusco_spacy
+            """  # noqa: E501
+            )
 
     corp = _pre_process_corpus(corp)
     # split long texts (> 500000 chars) into chunks
