@@ -234,15 +234,13 @@ def freq_simplify(frequency_table: pl.DataFrame) -> pl.DataFrame:
     :param frequency_table: A frequency table.
     :return: A polars DataFrame of token counts.
     """
-    validation = OrderedDict([('Token', pl.String),
-                              ('Tag', pl.String),
-                              ('AF', pl.UInt32),
-                              ('RF', pl.Float64),
-                              ('Range', pl.Float64)])
-    if frequency_table.collect_schema() != validation:
+    required_columns = {'Token', 'Tag', 'AF', 'RF', 'Range'}
+    table_columns = set(frequency_table.columns)
+    if not required_columns.issubset(table_columns):
         raise ValueError("""
                          Invalid DataFrame.
-                         Expected a DataFrame produced by frequency_table.
+                         Expected a DataFrame produced by frequency_table
+                         that includes columns: Token, Tag, AF, RF, Range.
                          """)
     tag_prefix = ["NN", "VV", "II"]
     if (not any(
