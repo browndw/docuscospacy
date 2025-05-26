@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '0.3.1'
+VERSION = '0.3.2'
 PACKAGE_NAME = 'docuscospacy'
 AUTHOR = 'David Brown'
 AUTHOR_EMAIL = 'dwb2@andrew.cmu.edu'
@@ -16,9 +16,10 @@ LONG_DESCRIPTION = (HERE / "README.rst").read_text()
 LONG_DESC_TYPE = "text/x-rst"
 
 INSTALL_REQUIRES = [
-      'polars>=1.15.0',
-      'spacy>=3.5.0',
-      'scipy>=1.11.0'
+      'importlib-resources>=6.5.0',
+      'polars>=1.30.0',
+      'spacy>=3.8.0',
+      'scipy>=1.15.0'
 ]
 
 setup(name=PACKAGE_NAME,
