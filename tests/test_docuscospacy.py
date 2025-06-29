@@ -5,6 +5,7 @@ import unittest
 import polars as pl
 import spacy
 import docuscospacy as ds
+from docuscospacy.validation import ModelValidationError
 
 
 class TestCorpusAnalysis(unittest.TestCase):
@@ -17,10 +18,12 @@ class TestCorpusAnalysis(unittest.TestCase):
             cls.nlp = None  # Skip tests if model is not available
 
         # Create a simple corpus DataFrame
-        cls.corpus = pl.DataFrame({
-            "doc_id": ["doc1", "doc2"],
-            "text": ["This is a test.", "Another test document."]
-        })
+        cls.corpus = pl.DataFrame(
+            {
+                "doc_id": ["doc1", "doc2"],
+                "text": ["This is a test.", "Another test document."],
+            }
+        )
 
     def setUp(self):
         if self.nlp is None:
@@ -29,15 +32,14 @@ class TestCorpusAnalysis(unittest.TestCase):
     def test_docuscope_parse_with_invalid_model(self):
         # Test with an invalid model
         invalid_nlp = spacy.blank("en")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ModelValidationError):
             ds.docuscope_parse(self.corpus, invalid_nlp)
 
     def test_docuscope_parse_skips_none_text(self):
         # Corpus with one None text value
-        corpus_with_none = pl.DataFrame({
-            "doc_id": ["doc1", "doc2"],
-            "text": [None, "Another test document."]
-        })
+        corpus_with_none = pl.DataFrame(
+            {"doc_id": ["doc1", "doc2"], "text": [None, "Another test document."]}
+        )
         df = ds.docuscope_parse(corpus_with_none, self.nlp)
         # Only doc2 should be present in the output
         self.assertTrue((df["doc_id"] == "doc2").all())
@@ -85,7 +87,9 @@ class TestCorpusAnalysis(unittest.TestCase):
     def test_ngrams(self):
         tokens_table = ds.docuscope_parse(self.corpus, self.nlp)
         # Use a small span and low min_frequency for test coverage
-        ngram_df = ds.ngrams(tokens_table, span=2, min_frequency=0, count_by='pos')  # noqa: E501
+        ngram_df = ds.ngrams(
+            tokens_table, span=2, min_frequency=0, count_by="pos"
+        )  # noqa: E501
         self.assertIsInstance(ngram_df, pl.DataFrame)
         # Check that expected columns exist
         self.assertIn("Token_1", ngram_df.columns)
@@ -96,7 +100,9 @@ class TestCorpusAnalysis(unittest.TestCase):
     def test_clusters_by_token(self):
         tokens_table = ds.docuscope_parse(self.corpus, self.nlp)
         # Use a token from your test corpus, e.g., "test"
-        result = ds.clusters_by_token(tokens_table, node_word="test", span=2, count_by='pos')  # noqa: E501
+        result = ds.clusters_by_token(
+            tokens_table, node_word="test", span=2, count_by="pos"
+        )  # noqa: E501
         # Should always return a DataFrame, even if empty
         self.assertIsInstance(result, pl.DataFrame)
         # If not empty, check for expected columns
@@ -109,7 +115,9 @@ class TestCorpusAnalysis(unittest.TestCase):
     def test_clusters_by_tag(self):
         tokens_table = ds.docuscope_parse(self.corpus, self.nlp)
         # Use a tag from your test corpus, e.g., "NN1" (adjust as needed)
-        result = ds.clusters_by_tag(tokens_table, tag="NN1", span=2, count_by='pos')  # noqa: E501
+        result = ds.clusters_by_tag(
+            tokens_table, tag="NN1", span=2, count_by="pos"
+        )  # noqa: E501
         self.assertIsInstance(result, pl.DataFrame)
         # If not empty, check for expected columns
         if result.height > 0:
@@ -131,7 +139,9 @@ class TestCorpusAnalysis(unittest.TestCase):
 
     def test_coll_table(self):
         tokens_table = ds.docuscope_parse(self.corpus, self.nlp)
-        coll_df = ds.coll_table(tokens_table, node_word="test", statistic="npmi", count_by="pos")  # noqa: E501
+        coll_df = ds.coll_table(
+            tokens_table, node_word="test", statistic="npmi", count_by="pos"
+        )  # noqa: E501
         self.assertIsInstance(coll_df, pl.DataFrame)
         # If not empty, check for expected columns
         if coll_df.height > 0:
@@ -144,10 +154,12 @@ class TestCorpusAnalysis(unittest.TestCase):
     def test_keyness_table(self):
         # Target corpus (already in setUpClass as self.corpus)
         # Reference corpus: different texts
-        reference_corpus = pl.DataFrame({
-            "doc_id": ["ref1", "ref2"],
-            "text": ["Reference document one.", "Reference document two."]
-        })
+        reference_corpus = pl.DataFrame(
+            {
+                "doc_id": ["ref1", "ref2"],
+                "text": ["Reference document one.", "Reference document two."],
+            }
+        )
         # Parse both corpora
         target_tokens = ds.docuscope_parse(self.corpus, self.nlp)
         reference_tokens = ds.docuscope_parse(reference_corpus, self.nlp)
@@ -197,15 +209,27 @@ class TestCorpusAnalysis(unittest.TestCase):
         self.assertIn("Tag", simple_freq.columns)
         # Check that all tags are from the simplified set (no raw POS prefixes)
         simplified_prefixes = [
-            "NounCommon", "VerbLex", "Adjective", "Adverb", "Pronoun",
-            "Preposition", "Conjunction", "NounOther", "VerbBe", "VerbOther", "Other"  # noqa: E501
+            "NounCommon",
+            "VerbLex",
+            "Adjective",
+            "Adverb",
+            "Pronoun",
+            "Preposition",
+            "Conjunction",
+            "NounOther",
+            "VerbBe",
+            "VerbOther",
+            "Other",  # noqa: E501
         ]
         for tag in simple_freq["Tag"].to_list():
-            self.assertTrue(any(tag.startswith(prefix) for prefix in simplified_prefixes))  # noqa: E501
+            self.assertTrue(
+                any(tag.startswith(prefix) for prefix in simplified_prefixes)
+            )  # noqa: E501
 
     def test_direct_import_micusp_mini(self):
         import polars as pl
         from docuscospacy.data import micusp_mini
+
         self.assertIsInstance(micusp_mini, pl.DataFrame)
         self.assertIn("doc_id", micusp_mini.columns)
         self.assertIn("text", micusp_mini.columns)

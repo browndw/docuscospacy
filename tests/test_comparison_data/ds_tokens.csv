@@ -1,0 +1,51 @@
+doc_id,token,pos_tag,ds_tag,pos_id,ds_id
+BIO_G0_02_1,Ernst ,NP1,Character,1,1
+BIO_G0_02_1,Mayr ,NP1,Character,2,1
+BIO_G0_02_1,once ,RR,Narrative,3,2
+BIO_G0_02_1,wrote,VVD,Citation,4,3
+BIO_G0_02_1,", ",Y,Citation,5,3
+BIO_G0_02_1,"""",Y,Untagged,6,4
+BIO_G0_02_1,sympatric ,JJ,AcademicTerms,7,5
+BIO_G0_02_1,speciation ,NN1,AcademicTerms,8,6
+BIO_G0_02_1,is ,VBZ,InformationExposition,9,7
+BIO_G0_02_1,like ,II,InformationExposition,10,7
+BIO_G0_02_1,the ,AT,InformationExposition,11,7
+BIO_G0_02_1,Lernaean ,JJ,Untagged,12,8
+BIO_G0_02_1,Hydra ,NP1,Character,13,9
+BIO_G0_02_1,which ,DDQ,Untagged,14,10
+BIO_G0_02_1,grew ,VVD,InformationChange,15,11
+BIO_G0_02_1,two ,MC,InformationExposition,16,12
+BIO_G0_02_1,new ,JJ,Narrative,17,13
+BIO_G0_02_1,heads ,NN2,Description,18,14
+BIO_G0_02_1,whenever ,RRQV,Contingent,19,15
+BIO_G0_02_1,one ,MC1,Untagged,20,16
+BIO_G0_02_1,of ,IO,Untagged,21,17
+BIO_G0_02_1,it ,PPH1,Untagged,22,18
+BIO_G0_02_1,s ,GE,Untagged,23,19
+BIO_G0_02_1,old ,JJ,Description,24,20
+BIO_G0_02_1,heads ,NN2,Description,25,21
+BIO_G0_02_1,was ,VBDZ,Narrative,26,22
+BIO_G0_02_1,cut ,VVN,Negative,27,23
+BIO_G0_02_1,off,RP,Negative,28,23
+BIO_G0_02_1,""" ",Y,Untagged,29,24
+BIO_G0_02_1,(,Y,Untagged,30,25
+BIO_G0_02_1,1963:451,MC,Untagged,31,26
+BIO_G0_02_1,),Y,Untagged,32,27
+BIO_G0_02_1,. ,Y,Untagged,33,28
+BIO_G0_02_1,This ,DD1,MetadiscourseCohesive,34,29
+BIO_G0_02_1,observation,NN1,AcademicTerms,35,30
+BIO_G0_02_1,", ",Y,Untagged,36,31
+BIO_G0_02_1,from ,II,Untagged,37,32
+BIO_G0_02_1,his ,APPGE,Character,38,33
+BIO_G0_02_1,landmark ,NN1,AcademicTerms,39,34
+BIO_G0_02_1,text ,NN1,AcademicTerms,40,34
+BIO_G0_02_1,Animal ,NN1,AcademicTerms,41,35
+BIO_G0_02_1,Species ,NN,AcademicTerms,42,36
+BIO_G0_02_1,and ,CC,Untagged,43,37
+BIO_G0_02_1,Evolution,NN1,InformationChangePositive,44,38
+BIO_G0_02_1,", ",Y,Untagged,45,39
+BIO_G0_02_1,marks ,VVZ,Strategic,46,40
+BIO_G0_02_1,the ,AT,Strategic,47,40
+BIO_G0_02_1,beginning ,NN1,Narrative,48,41
+BIO_G0_02_1,of ,IO,Narrative,49,41
+BIO_G0_02_1,his ,APPGE,Character,50,42
