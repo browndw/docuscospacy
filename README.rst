@@ -20,7 +20,7 @@ The documentation for docuscospacy is available on `docuscospacy.readthedocs.org
 Requirements and installation
 -----------------------------
 
-**docuscospacy works with Python 3.8 or newer (tested up to Python 3.10).** It also requires `spacy >= 3.3 <https://spacy.io/usage>`_.
+**docuscospacy works with Python 3.9 or newer (tested up to Python 3.10).** It also requires `spacy >= 3.3 <https://spacy.io/usage>`_.
 
 The recommended way of installing *docuscospacy* is to:
 
