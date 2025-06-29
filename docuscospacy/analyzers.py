@@ -708,8 +708,8 @@ class NGramAnalyzer:
             .explode(["ngram", "tags"])
             # Filter out n-grams containing null values (critical fix!)
             .filter(
-                pl.col("ngram").list.eval(pl.element().is_not_null()).list.all()
-                & pl.col("tags").list.eval(pl.element().is_not_null()).list.all()
+                (~pl.col("ngram").list.contains(None)) &
+                (~pl.col("tags").list.contains(None))
             )
             .with_columns(
                 pl.col(["ngram", "tags"]).list.to_struct(fields=struct_labels)
