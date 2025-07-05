@@ -551,18 +551,47 @@ class DataFrameTransformer:
     """Handles DataFrame transformations and formatting."""
 
     @staticmethod
-    def recombine_chunks(df: pl.DataFrame) -> pl.DataFrame:
-        """Recombine chunked documents and sort by document ID."""
-        return (
+    def recombine_chunks(
+        df: pl.DataFrame, original_doc_order: List[str] = None
+    ) -> pl.DataFrame:
+        """Recombine chunked documents and preserve original document order."""
+        # Split chunk info from doc_id
+        df_split = (
             df.with_columns(
                 pl.col("doc_id").str.split_exact(CONFIG.CHUNK_ID_SEPARATOR, 1)
             )
             .unnest("doc_id")
             .rename({"field_0": "chunk_id", "field_1": "doc_id"})
             .with_columns(pl.col("chunk_id").cast(pl.UInt32, strict=False))
-            .sort(["doc_id", "chunk_id"], descending=[False, False])
-            .drop("chunk_id")
         )
+
+        # If we have original document order, preserve it
+        if original_doc_order is not None:
+            # Create order mapping
+            doc_order_map = {doc_id: i for i, doc_id in enumerate(original_doc_order)}
+
+            # Add order column and sort by it, then by chunk_id
+            df_with_order = df_split.with_columns(
+                pl.col("doc_id").map_elements(
+                    lambda x: doc_order_map.get(x, 999999),  # Unknown docs go to end
+                    return_dtype=pl.UInt32
+                ).alias("doc_order")
+            )
+
+            result = (
+                df_with_order
+                .sort(["doc_order", "chunk_id"], descending=[False, False])
+                .drop(["chunk_id", "doc_order"])
+            )
+        else:
+            # Fallback: sort by doc_id and chunk_id (preserves alphabetical order)
+            result = (
+                df_split
+                .sort(["doc_id", "chunk_id"], descending=[False, False])
+                .drop("chunk_id")
+            )
+
+        return result
 
     @staticmethod
     def add_pos_ids(df: pl.DataFrame) -> pl.DataFrame:
@@ -659,13 +688,15 @@ class DataFrameTransformer:
             pl.concat_str([pl.col("token"), pl.col("ws")], separator="").alias("token")
         ).drop(["token_1", "ws"])
 
-    def transform_spacy_output(self, df_list: List[pl.DataFrame]) -> pl.DataFrame:
+    def transform_spacy_output(
+        self, df_list: List[pl.DataFrame], original_doc_order: List[str] = None
+    ) -> pl.DataFrame:
         """Apply all transformations to spaCy output."""
         # Concatenate all DataFrames
         df = pl.concat(df_list)
 
         # Apply transformations in sequence
-        df = self.recombine_chunks(df)
+        df = self.recombine_chunks(df, original_doc_order=original_doc_order)
         df = self.add_pos_ids(df)
         df = self.add_ds_ids(df)
         df = self.apply_tag_corrections(df)
@@ -713,6 +744,9 @@ class CorpusProcessor:
             # Filter out empty texts
             corp = corp.filter(pl.col("text").is_not_null())
 
+            # Capture original document order before any transformations
+            original_doc_order = corp["doc_id"].to_list()
+
             # Determine if we should show progress
             if show_progress is None:
                 show_progress = len(corp) > CONFIG.PROGRESS_THRESHOLD
@@ -753,7 +787,9 @@ class CorpusProcessor:
                     progress.update(len(corp) // 4)
 
                 # Transform and finalize
-                result = self.transformer.transform_spacy_output(df_list)
+                result = self.transformer.transform_spacy_output(
+                    df_list, original_doc_order=original_doc_order
+                )
                 if show_progress:
                     progress.update(len(corp) // 4)
                     progress.finish()
