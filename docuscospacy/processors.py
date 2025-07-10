@@ -301,17 +301,22 @@ class TextPreprocessor:
             corp.with_columns(
                 pl.col("text").map_elements(
                     self.squish_whitespace, return_dtype=pl.String
-                )
+                    )
             )
             .with_columns(
                 pl.col("text").map_elements(
                     self.replace_curly_quotes, return_dtype=pl.String
-                )
+                    )
             )
             .with_columns(
                 pl.col("text").map_elements(
                     self.normalize_unicode, return_dtype=pl.String
-                )
+                    )
+            )
+            .with_columns(
+                pl.col("text").map_elements(
+                    self.squish_whitespace, return_dtype=pl.String
+                    )
             )
             .with_columns(
                 pl.col("text").str.replace_all(PATTERNS.ITS_PATTERN_STR, r"${1} ${2}")
